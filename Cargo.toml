@@ -1,0 +1,18 @@
+[package]
+name = "libmtp"
+version = "0.1.0"
+authors = ["frofor <18nraywczifc@protonmail.com>"]
+edition = "2024"
+description = "A memory safe API for interacting with libmtp library"
+repository = "https://codeberg.org/frofor/libmtp"
+license = "MIT"
+keywords = ["mtp", "libmtp", "android"]
+categories = ["external-ffi-bindings"]
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+
+[dependencies]
+libc = "0.2.174"
