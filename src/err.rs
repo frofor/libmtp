@@ -1,4 +1,4 @@
-//! This module provides specialized error types used for error handling withing the crate.
+//! This module provides specialized error types used for error handling.
 
 use crate::convert::ptr_to_string;
 use crate::ffi;
@@ -8,11 +8,11 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::result;
 
-/// Specialized `Result` type used within the crate.
+/// Specialized Result type used within the crate.
 pub type Result<T> = result::Result<T, Error>;
 
-/// Specialized `Error` type used within the crate.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+/// Specialized Error type used within the crate.
+#[derive(Clone, Hash, Debug)]
 pub struct Error {
 	/// The category of the error.
 	pub kind: Kind,
@@ -21,12 +21,12 @@ pub struct Error {
 }
 
 impl Error {
-	/// Constructs a new error from `kind` and `msg`.
+	/// Constructs a new error from the kind and the message.
 	pub(crate) fn new(kind: Kind, msg: &str) -> Self {
 		Self { kind, msg: msg.to_owned() }
 	}
 
-	/// Constructs a new error from LIBMTP_error_t stack.
+	/// Constructs a new error from the underlying structure.
 	pub(crate) fn from_stack(stack: *const ffi::LIBMTP_error_t) -> Option<Self> {
 		if stack.is_null() {
 			return None;
@@ -61,7 +61,7 @@ impl Default for Error {
 }
 
 /// Category for an error used within the crate.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Kind {
 	/// General error.
 	General,
@@ -85,7 +85,7 @@ pub enum Kind {
 }
 
 impl Kind {
-	/// Constructs an error kind from LIBMTP_error_number_t.
+	/// Constructs an error kind from the underlying structure.
 	pub(crate) fn from_number(n: ffi::LIBMTP_error_number_t) -> Option<Self> {
 		match n {
 			ffi::LIBMTP_error_number_t::None => None,

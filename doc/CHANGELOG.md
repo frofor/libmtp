@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0
+
+Removed unnecessary derives for most structures.
+
+Updated device API:
+- Renamed `ClosedDevice` to `RawDevice`.
+- Changed return type of `discover` from vector to iterator.
+- Added `storages` method for iterating over the storages of the device.
+- Fields on `Vendor` and `Product` are made public.
+
+Added storage API:
+- `libmtp::Storage`: A storage of the device.
+
 ## 0.1.0
 
 Added external FFI bindings to `libmtp`.

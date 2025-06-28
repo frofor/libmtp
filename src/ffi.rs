@@ -49,21 +49,8 @@ pub(crate) type MTPDataPutFunc = Option<
 pub(crate) type LIBMTP_event_cb_fn =
 	Option<unsafe extern "C" fn(a: c_int, b: LIBMTP_event_t, c: u32, d: *mut c_void)>;
 
-pub(crate) const LIBMTP_DEBUG_NONE: u8 = 0;
-pub(crate) const LIBMTP_DEBUG_PTP: u8 = 1;
-pub(crate) const LIBMTP_DEBUG_PLST: u8 = 2;
-pub(crate) const LIBMTP_DEBUG_USB: u8 = 4;
-pub(crate) const LIBMTP_DEBUG_DATA: u8 = 8;
-pub(crate) const LIBMTP_DEBUG_ALL: u8 = 255;
-pub(crate) const LIBMTP_HANDLER_RETURN_OK: u8 = 0;
-pub(crate) const LIBMTP_HANDLER_RETURN_ERROR: u8 = 1;
-pub(crate) const LIBMTP_HANDLER_RETURN_CANCEL: u8 = 2;
-pub(crate) const LIBMTP_STORAGE_SORTBY_NOTSORTED: u8 = 0;
-pub(crate) const LIBMTP_STORAGE_SORTBY_FREESPACE: u8 = 1;
-pub(crate) const LIBMTP_STORAGE_SORTBY_MAXSPACE: u8 = 2;
-
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum LIBMTP_event_enum {
 	#[default]
 	None,
@@ -75,7 +62,7 @@ pub(crate) enum LIBMTP_event_enum {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum LIBMTP_filetype_t {
 	Folder,
 	Wav,
@@ -126,7 +113,7 @@ pub(crate) enum LIBMTP_filetype_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum LIBMTP_property_t {
 	StorageId,
 	ObjectFormat,
@@ -300,7 +287,7 @@ pub(crate) enum LIBMTP_property_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum LIBMTP_datatype_t {
 	Int8,
 	Uint8,
@@ -313,7 +300,7 @@ pub(crate) enum LIBMTP_datatype_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum LIBMTP_devicecap_t {
 	GetPartialObject,
 	SendPartialObject,
@@ -323,7 +310,7 @@ pub(crate) enum LIBMTP_devicecap_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum LIBMTP_error_number_t {
 	#[default]
 	None,
@@ -338,7 +325,7 @@ pub(crate) enum LIBMTP_error_number_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_device_entry_struct {
 	pub(crate) vendor: *mut c_char,
 	pub(crate) vendor_id: u16,
@@ -348,7 +335,7 @@ pub(crate) struct LIBMTP_device_entry_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_raw_device_struct {
 	pub(crate) device_entry: LIBMTP_device_entry_t,
 	pub(crate) bus_location: u32,
@@ -356,7 +343,7 @@ pub(crate) struct LIBMTP_raw_device_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_error_struct {
 	pub(crate) errornumber: LIBMTP_error_number_t,
 	pub(crate) error_text: *mut c_char,
@@ -364,7 +351,7 @@ pub(crate) struct LIBMTP_error_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_allowed_values_struct {
 	pub(crate) u8max: u8,
 	pub(crate) u8min: u8,
@@ -404,7 +391,7 @@ pub(crate) struct LIBMTP_allowed_values_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_device_extension_struct {
 	pub(crate) name: *mut c_char,
 	pub(crate) major: c_int,
@@ -413,7 +400,7 @@ pub(crate) struct LIBMTP_device_extension_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_mtpdevice_struct {
 	pub(crate) object_bitsize: u8,
 	pub(crate) params: *mut c_void,
@@ -436,7 +423,7 @@ pub(crate) struct LIBMTP_mtpdevice_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_file_struct {
 	pub(crate) item_id: u32,
 	pub(crate) parent_id: u32,
@@ -449,7 +436,7 @@ pub(crate) struct LIBMTP_file_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_track_struct {
 	pub(crate) item_id: u32,
 	pub(crate) parent_id: u32,
@@ -477,7 +464,7 @@ pub(crate) struct LIBMTP_track_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_playlist_struct {
 	pub(crate) playlist_id: u32,
 	pub(crate) parent_id: u32,
@@ -489,7 +476,7 @@ pub(crate) struct LIBMTP_playlist_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_album_struct {
 	pub(crate) album_id: u32,
 	pub(crate) parent_id: u32,
@@ -504,7 +491,7 @@ pub(crate) struct LIBMTP_album_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_folder_struct {
 	pub(crate) folder_id: u32,
 	pub(crate) parent_id: u32,
@@ -515,7 +502,7 @@ pub(crate) struct LIBMTP_folder_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_filesampledata_struct {
 	pub(crate) width: u32,
 	pub(crate) height: u32,
@@ -526,7 +513,7 @@ pub(crate) struct LIBMTP_filesampledata_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub(crate) struct LIBMTP_devicestorage_struct {
 	pub(crate) id: u32,
 	pub(crate) StorageType: u16,

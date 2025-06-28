@@ -1,20 +1,24 @@
-//! This module provides API for managing MTP devices.
+//! This module provides API for managing devices.
 
 use crate::Error;
 use crate::Result;
+use crate::Storage;
 use crate::convert::ptr_to_string;
 use crate::err;
 use crate::ffi;
+use crate::storage;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::ffi::c_void;
 use std::fmt;
 use std::fmt::Debug;
+use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ptr;
+use std::ptr::null_mut;
 
 /// Discovers the devices connected via USB, but not yet opened.
-pub fn discover() -> Result<Vec<ClosedDevice>> {
+pub fn discover() -> Result<RawIter> {
 	unsafe {
 		ffi::LIBMTP_Init();
 	};
@@ -22,35 +26,24 @@ pub fn discover() -> Result<Vec<ClosedDevice>> {
 	let mut ptr = ptr::null_mut();
 	let mut len = 0;
 
-	let res = unsafe { ffi::LIBMTP_Detect_Raw_Devices(&mut ptr, &mut len) };
-	match err::Kind::from_number(res) {
-		Some(err::Kind::NoDeviceAttached) => return Ok(Vec::new()),
-		Some(kind) => return Err(Error::new(kind, "Failed to detect raw devices")),
-		None => {}
+	let n = unsafe { ffi::LIBMTP_Detect_Raw_Devices(&mut ptr, &mut len) };
+	match err::Kind::from_number(n) {
+		Some(err::Kind::NoDeviceAttached) => Ok(RawIter::new(null_mut())),
+		Some(kind) => Err(Error::new(kind, "Failed to discover raw devices")),
+		None => Ok(RawIter::new(ptr)),
 	}
-
-	let mut devs = Vec::with_capacity(len as usize);
-	for i in 0..(len as isize) {
-		let dev_ptr = unsafe { ptr.offset(i) };
-		devs.push(ClosedDevice::from_inner(unsafe { *dev_ptr }));
-	}
-
-	unsafe {
-		libc::free(ptr as *mut c_void);
-	};
-
-	Ok(devs)
 }
 
 /// An opened device connected via USB.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Hash)]
 pub struct Device {
+	/// The underlying structure of the device.
 	pub(crate) inner: *mut ffi::LIBMTP_mtpdevice_t,
 }
 
 impl Device {
-	/// Constructs an opened device from the pointer to LIBMTP_mtpdevice_t.
-	pub(crate) fn from_inner(inner: *mut ffi::LIBMTP_mtpdevice_t) -> Self {
+	/// Constructs a device from the underlying structure.
+	pub(crate) fn new(inner: *mut ffi::LIBMTP_mtpdevice_t) -> Self {
 		Self { inner }
 	}
 
@@ -82,9 +75,9 @@ impl Device {
 	///
 	/// Panics if `name` contains a nul byte.
 	pub fn rename(&mut self, name: &str) -> Result<()> {
-		let name = CString::new(name).expect("Name should not contain nul byte");
-		let code = unsafe { ffi::LIBMTP_Set_Friendlyname(self.inner, name.as_ptr()) };
-		if code != 0 {
+		let name = CString::new(name).expect("Name should not contain a nul byte");
+		let n = unsafe { ffi::LIBMTP_Set_Friendlyname(self.inner, name.as_ptr()) };
+		if n != 0 {
 			return Err(self.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -92,79 +85,68 @@ impl Device {
 
 	/// Retrieves the maximum battery percentage of the device.
 	pub fn max_battery_percent(&self) -> u8 {
-		unsafe { (*self.inner).maximum_battery_level }
+		(unsafe { *self.inner }).maximum_battery_level
 	}
 
 	/// Retrieves the ID of the default music folder of the device.
 	///
-	/// <div class="warning">
 	/// If the default music folder was not found, the ID of the root folder will be returned.
-	/// </div>
 	pub fn music_folder_id(&self) -> u32 {
-		unsafe { (*self.inner).default_music_folder }
+		(unsafe { *self.inner }).default_music_folder
 	}
 
 	/// Retrieves the ID of the default playlists folder of the device.
 	///
-	/// <div class="warning">
 	/// If the default playlists folder was not found, the ID of the root folder will be returned.
-	/// </div>
 	pub fn playlist_folder_id(&self) -> u32 {
-		unsafe { (*self.inner).default_playlist_folder }
+		(unsafe { *self.inner }).default_playlist_folder
 	}
 
 	/// Retrieves the ID of the default pictures folder of the device.
 	///
-	/// <div class="warning">
 	/// If the default pictures folder was not found, the ID of the root folder will be returned.
-	/// </div>
 	pub fn picture_folder_id(&self) -> u32 {
-		unsafe { (*self.inner).default_picture_folder }
+		(unsafe { *self.inner }).default_picture_folder
 	}
 
 	/// Retrieves the ID of the default videos folder of the device.
 	///
-	/// <div class="warning">
 	/// If the default videos folder was not found, the ID of the root folder will be returned.
-	/// </div>
 	pub fn video_folder_id(&self) -> u32 {
-		unsafe { (*self.inner).default_video_folder }
+		(unsafe { *self.inner }).default_video_folder
 	}
 
 	/// Retrieves the ID of the default organizers folder of the device.
 	///
-	/// <div class="warning">
 	/// If the default organizers folder was not found, the ID of the root folder will be returned.
-	/// </div>
 	pub fn organizer_folder_id(&self) -> u32 {
-		unsafe { (*self.inner).default_organizer_folder }
+		(unsafe { *self.inner }).default_organizer_folder
 	}
 
 	/// Retrieves the ID of the default ZENcast folder of the device.
 	///
-	/// <div class="warning">
 	/// If the default ZENcast folder was not found, the ID of the root folder will be returned.
-	/// </div>
 	pub fn zencast_folder_id(&self) -> u32 {
-		unsafe { (*self.inner).default_zencast_folder }
+		(unsafe { *self.inner }).default_zencast_folder
 	}
 
 	/// Retrieves the ID of the default albums folder of the device.
 	///
-	/// <div class="warning">
 	/// If the default albums folder was not found, the ID of the root folder will be returned.
-	/// </div>
 	pub fn album_folder_id(&self) -> u32 {
-		unsafe { (*self.inner).default_album_folder }
+		(unsafe { *self.inner }).default_album_folder
 	}
 
 	/// Retrieves the ID of the default texts folder of the device.
 	///
-	/// <div class="warning">
 	/// If the default texts folder was not found, the ID of the root folder will be returned.
-	/// </div>
 	pub fn text_folder_id(&self) -> u32 {
-		unsafe { (*self.inner).default_text_folder }
+		(unsafe { *self.inner }).default_text_folder
+	}
+
+	/// Retrieves an iterator over the storages of the device.
+	pub fn storages(&self) -> storage::Iter {
+		storage::Iter::new(self)
 	}
 
 	/// Pops the last error from the error stack.
@@ -205,14 +187,24 @@ impl Debug for Device {
 	}
 }
 
+impl<'a> IntoIterator for &'a Device {
+	type Item = Storage<'a>;
+	type IntoIter = storage::Iter<'a>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.storages()
+	}
+}
+
 /// A device connected via USB, but not yet opened.
-pub struct ClosedDevice {
+pub struct RawDevice {
+	/// The underlying structure of the device.
 	pub(crate) inner: ffi::LIBMTP_raw_device_t,
 }
 
-impl ClosedDevice {
-	/// Constructs a closed device from the pointer to LIBMTP_raw_device_t.
-	pub(crate) fn from_inner(inner: ffi::LIBMTP_raw_device_t) -> Self {
+impl RawDevice {
+	/// Constructs a raw device from the underlying structure.
+	pub(crate) fn new(inner: ffi::LIBMTP_raw_device_t) -> Self {
 		Self { inner }
 	}
 
@@ -247,28 +239,23 @@ impl ClosedDevice {
 	}
 
 	/// Attempts to open the device, with caching.
-	///
-	/// Initial call might take longer due to caching overhead.
-	/// May provide less accurate results compared to [`ClosedDevice::open`].
 	pub fn open(&self) -> Option<Device> {
 		let ptr = &self.inner as *const _;
 		let dev_ptr = unsafe { ffi::LIBMTP_Open_Raw_Device(ptr as *mut _) };
-		if dev_ptr.is_null() { None } else { Some(Device::from_inner(dev_ptr)) }
+		if dev_ptr.is_null() { None } else { Some(Device::new(dev_ptr)) }
 	}
 
 	/// Attempts to open the device, without caching.
-	///
-	/// May provide more accurate results compared to [`ClosedDevice::open`].
 	pub fn open_uncached(&self) -> Option<Device> {
 		let ptr = &self.inner as *const _;
 		let dev_ptr = unsafe { ffi::LIBMTP_Open_Raw_Device_Uncached(ptr as *mut _) };
-		if dev_ptr.is_null() { None } else { Some(Device::from_inner(dev_ptr)) }
+		if dev_ptr.is_null() { None } else { Some(Device::new(dev_ptr)) }
 	}
 }
 
-impl Debug for ClosedDevice {
+impl Debug for RawDevice {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-		f.debug_struct("ClosedDevice")
+		f.debug_struct("RawDevice")
 			.field("vendor", &self.vendor())
 			.field("product", &self.product())
 			.finish()
@@ -276,33 +263,78 @@ impl Debug for ClosedDevice {
 }
 
 /// A vendor of the device.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub struct Vendor<'a> {
 	/// The ID of the vendor.
-	id: u16,
+	pub id: u16,
 	/// The name of the vendor.
-	name: &'a str,
+	pub name: &'a str,
 }
 
 impl<'a> Vendor<'a> {
-	/// Constructs a new vendor from `id` and `name`.
+	/// Constructs a new vendor from the id and the name.
 	pub(crate) fn new(id: u16, name: &'a str) -> Self {
 		Self { id, name }
 	}
 }
 
+impl<'a> Display for Vendor<'a> {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.name)
+	}
+}
+
 /// A product of the device.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Hash, Debug)]
 pub struct Product<'a> {
 	/// The ID of the product.
-	id: u16,
+	pub id: u16,
 	/// The name of the product.
-	name: &'a str,
+	pub name: &'a str,
 }
 
 impl<'a> Product<'a> {
-	/// Constructs a new product from `id` and `name`.
+	/// Constructs a new product from the id and the name.
 	pub(crate) fn new(id: u16, name: &'a str) -> Self {
 		Self { id, name }
+	}
+}
+
+impl<'a> Display for Product<'a> {
+	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.name)
+	}
+}
+
+/// An iterator over the raw devices.
+pub struct RawIter {
+	pub(crate) inner: *mut ffi::LIBMTP_raw_device_t,
+}
+
+impl RawIter {
+	/// Constructs a new raw device iterator from the underlying structure.
+	pub(crate) fn new(inner: *mut ffi::LIBMTP_raw_device_t) -> Self {
+		Self { inner }
+	}
+}
+
+impl Iterator for RawIter {
+	type Item = RawDevice;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.inner.is_null() {
+			return None;
+		}
+		let inner = unsafe { self.inner.offset(1) };
+		Some(RawDevice::new(unsafe { *inner }))
+	}
+}
+
+#[doc(hidden)]
+impl Drop for RawIter {
+	fn drop(&mut self) {
+		unsafe {
+			libc::free(self.inner as *mut c_void);
+		}
 	}
 }
