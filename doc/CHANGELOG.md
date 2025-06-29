@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1
+
+Updated device API:
+- Fixed `RawIter` not iterating correctly.
+
+Updated manifest:
+- Changed categories for more appropriate ones.
+
+Hidden unnecessary derives from documentation.
+
 ## 0.2.0
 
 Removed unnecessary derives for most structures.

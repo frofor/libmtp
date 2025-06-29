@@ -13,9 +13,9 @@ use crate::ffi;
 #[derive(Clone, Hash)]
 pub struct Storage<'a> {
 	/// The device that owns the storage.
-	pub(crate) owner: &'a Device,
+	owner: &'a Device,
 	/// The underlying struture of the storage.
-	pub(crate) inner: *mut ffi::LIBMTP_devicestorage_t,
+	inner: *mut ffi::LIBMTP_devicestorage_t,
 }
 
 impl<'a> Storage<'a> {
@@ -53,14 +53,14 @@ impl<'a> Debug for Storage<'a> {
 
 /// An iterator over the storages of the device.
 pub struct Iter<'a> {
-	pub(crate) owner: &'a Device,
-	pub(crate) inner: *mut ffi::LIBMTP_devicestorage_t,
+	dev: &'a Device,
+	ptr: *mut ffi::LIBMTP_devicestorage_t,
 }
 
 impl<'a> Iter<'a> {
-	/// Constructs a new storage iterator from the device.
-	pub(crate) fn new(owner: &'a Device) -> Self {
-		Self { owner, inner: (unsafe { *owner.inner }).storage }
+	/// Constructs a new storage iterator from the device and underlying storage struture.
+	pub(crate) fn new(dev: &'a Device, ptr: *mut ffi::LIBMTP_devicestorage_t) -> Self {
+		Self { dev, ptr }
 	}
 }
 
@@ -68,12 +68,12 @@ impl<'a> Iterator for Iter<'a> {
 	type Item = Storage<'a>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		if self.inner.is_null() {
+		if self.ptr.is_null() {
 			return None;
 		}
 
-		let storage = Storage::new(self.owner, self.inner);
-		self.inner = (unsafe { *self.inner }).next;
+		let storage = Storage::new(self.dev, self.ptr);
+		self.ptr = (unsafe { *self.ptr }).next;
 		Some(storage)
 	}
 }

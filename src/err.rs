@@ -17,7 +17,7 @@ pub struct Error {
 	/// The category of the error.
 	pub kind: Kind,
 	/// The message of the error.
-	pub(crate) msg: String,
+	msg: String,
 }
 
 impl Error {
@@ -54,6 +54,7 @@ impl Display for Error {
 	}
 }
 
+#[doc(hidden)]
 impl Default for Error {
 	fn default() -> Self {
 		Self { kind: Default::default(), msg: "Unknown error".to_owned() }
@@ -61,7 +62,7 @@ impl Default for Error {
 }
 
 /// Category for an error used within the crate.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Kind {
 	/// General error.
 	General,
@@ -80,7 +81,6 @@ pub enum Kind {
 	/// The operation was cancelled.
 	Cancelled,
 	/// Unknown error.
-	#[default]
 	Unknown,
 }
 
@@ -98,5 +98,12 @@ impl Kind {
 			ffi::LIBMTP_error_number_t::Connecting => Some(Self::Connecting),
 			ffi::LIBMTP_error_number_t::Cancelled => Some(Self::Cancelled),
 		}
+	}
+}
+
+#[doc(hidden)]
+impl Default for Kind {
+	fn default() -> Self {
+		Kind::Unknown
 	}
 }

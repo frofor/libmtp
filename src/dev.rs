@@ -15,7 +15,6 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ptr;
-use std::ptr::null_mut;
 
 /// Discovers the devices connected via USB, but not yet opened.
 pub fn discover() -> Result<RawIter> {
@@ -28,9 +27,10 @@ pub fn discover() -> Result<RawIter> {
 
 	let n = unsafe { ffi::LIBMTP_Detect_Raw_Devices(&mut ptr, &mut len) };
 	match err::Kind::from_number(n) {
-		Some(err::Kind::NoDeviceAttached) => Ok(RawIter::new(null_mut())),
-		Some(kind) => Err(Error::new(kind, "Failed to discover raw devices")),
-		None => Ok(RawIter::new(ptr)),
+		Some(kind) if kind != err::Kind::NoDeviceAttached => {
+			Err(Error::new(kind, "Failed to discover raw devices"))
+		}
+		_ => Ok(RawIter::new(ptr, len as isize)),
 	}
 }
 
@@ -38,12 +38,12 @@ pub fn discover() -> Result<RawIter> {
 #[derive(Clone, Hash)]
 pub struct Device {
 	/// The underlying structure of the device.
-	pub(crate) inner: *mut ffi::LIBMTP_mtpdevice_t,
+	inner: *mut ffi::LIBMTP_mtpdevice_t,
 }
 
 impl Device {
 	/// Constructs a device from the underlying structure.
-	pub(crate) fn new(inner: *mut ffi::LIBMTP_mtpdevice_t) -> Self {
+	fn new(inner: *mut ffi::LIBMTP_mtpdevice_t) -> Self {
 		Self { inner }
 	}
 
@@ -146,13 +146,13 @@ impl Device {
 
 	/// Retrieves an iterator over the storages of the device.
 	pub fn storages(&self) -> storage::Iter {
-		storage::Iter::new(self)
+		storage::Iter::new(self, (unsafe { *self.inner }).storage)
 	}
 
 	/// Pops the last error from the error stack.
 	///
 	/// After the execution the error stack will be cleared.
-	pub(crate) fn pop_err(&self) -> Option<Error> {
+	fn pop_err(&self) -> Option<Error> {
 		let stack = unsafe { ffi::LIBMTP_Get_Errorstack(self.inner) };
 		let err = Error::from_stack(stack);
 		unsafe {
@@ -199,12 +199,12 @@ impl<'a> IntoIterator for &'a Device {
 /// A device connected via USB, but not yet opened.
 pub struct RawDevice {
 	/// The underlying structure of the device.
-	pub(crate) inner: ffi::LIBMTP_raw_device_t,
+	inner: ffi::LIBMTP_raw_device_t,
 }
 
 impl RawDevice {
 	/// Constructs a raw device from the underlying structure.
-	pub(crate) fn new(inner: ffi::LIBMTP_raw_device_t) -> Self {
+	fn new(inner: ffi::LIBMTP_raw_device_t) -> Self {
 		Self { inner }
 	}
 
@@ -273,7 +273,7 @@ pub struct Vendor<'a> {
 
 impl<'a> Vendor<'a> {
 	/// Constructs a new vendor from the id and the name.
-	pub(crate) fn new(id: u16, name: &'a str) -> Self {
+	fn new(id: u16, name: &'a str) -> Self {
 		Self { id, name }
 	}
 }
@@ -295,7 +295,7 @@ pub struct Product<'a> {
 
 impl<'a> Product<'a> {
 	/// Constructs a new product from the id and the name.
-	pub(crate) fn new(id: u16, name: &'a str) -> Self {
+	fn new(id: u16, name: &'a str) -> Self {
 		Self { id, name }
 	}
 }
@@ -308,13 +308,15 @@ impl<'a> Display for Product<'a> {
 
 /// An iterator over the raw devices.
 pub struct RawIter {
-	pub(crate) inner: *mut ffi::LIBMTP_raw_device_t,
+	ptr: *mut ffi::LIBMTP_raw_device_t,
+	len: isize,
+	off: isize,
 }
 
 impl RawIter {
 	/// Constructs a new raw device iterator from the underlying structure.
-	pub(crate) fn new(inner: *mut ffi::LIBMTP_raw_device_t) -> Self {
-		Self { inner }
+	fn new(ptr: *mut ffi::LIBMTP_raw_device_t, len: isize) -> Self {
+		Self { ptr, len, off: 0 }
 	}
 }
 
@@ -322,11 +324,14 @@ impl Iterator for RawIter {
 	type Item = RawDevice;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		if self.inner.is_null() {
+		if self.off == self.len {
 			return None;
 		}
-		let inner = unsafe { self.inner.offset(1) };
-		Some(RawDevice::new(unsafe { *inner }))
+
+		let ptr = unsafe { *self.ptr.offset(self.off) };
+		let dev = RawDevice::new(ptr);
+		self.off += 1;
+		Some(dev)
 	}
 }
 
@@ -334,7 +339,7 @@ impl Iterator for RawIter {
 impl Drop for RawIter {
 	fn drop(&mut self) {
 		unsafe {
-			libc::free(self.inner as *mut c_void);
+			libc::free(self.ptr as *mut c_void);
 		}
 	}
 }
