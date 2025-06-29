@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+Added object API:
+- `libmtp::Object`: A file or a folder on the storage.
+- `libmtp::obj::Folder`: A folder on the storage.
+- `libmtp::obj::File`: A file on the storage.
+
+Updated device API:
+- Added `refresh` method for refreshing information of the storages of the device.
+
+Updated storage API:
+- Added `iter` method for iterating over the objects of the storage.
+
 ## 0.2.1
 
 Updated device API:

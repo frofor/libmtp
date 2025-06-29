@@ -49,6 +49,11 @@ pub(crate) type MTPDataPutFunc = Option<
 pub(crate) type LIBMTP_event_cb_fn =
 	Option<unsafe extern "C" fn(a: c_int, b: LIBMTP_event_t, c: u32, d: *mut c_void)>;
 
+pub(crate) const LIBMTP_STORAGE_SORTBY_NOTSORTED: c_int = 0;
+pub(crate) const LIBMTP_STORAGE_SORTBY_FREESPACE: c_int = 1;
+pub(crate) const LIBMTP_STORAGE_SORTBY_MAXSPACE: c_int = 2;
+pub(crate) const LIBMTP_FILES_AND_FOLDERS_ROOT: u32 = 4294967295;
+
 #[repr(C)]
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum LIBMTP_event_enum {

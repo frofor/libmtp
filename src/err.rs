@@ -21,26 +21,26 @@ pub struct Error {
 }
 
 impl Error {
-	/// Constructs a new error from the kind and the message.
+	/// Constructs a new error.
 	pub(crate) fn new(kind: Kind, msg: &str) -> Self {
 		Self { kind, msg: msg.to_owned() }
 	}
 
-	/// Constructs a new error from the underlying structure.
-	pub(crate) fn from_stack(stack: *const ffi::LIBMTP_error_t) -> Option<Self> {
-		if stack.is_null() {
+	/// Constructs a new error.
+	pub(crate) fn from_ffi(ptr: *const ffi::LIBMTP_error_t) -> Option<Self> {
+		if ptr.is_null() {
 			return None;
 		}
 
-		let mut stack = stack;
-		let mut err = unsafe { *stack };
+		let mut ptr = ptr;
+		let mut err = unsafe { *ptr };
 
 		while !err.next.is_null() {
-			stack = err.next;
-			err = unsafe { *stack };
+			ptr = err.next;
+			err = unsafe { *ptr };
 		}
 
-		let kind = Kind::from_number(err.errornumber)?;
+		let kind = Kind::from_ffi(err.errornumber)?;
 		let msg = unsafe { ptr_to_string(err.error_text) };
 		Some(Self { kind, msg })
 	}
@@ -62,7 +62,7 @@ impl Default for Error {
 }
 
 /// Category for an error used within the crate.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Kind {
 	/// General error.
 	General,
@@ -85,8 +85,8 @@ pub enum Kind {
 }
 
 impl Kind {
-	/// Constructs an error kind from the underlying structure.
-	pub(crate) fn from_number(n: ffi::LIBMTP_error_number_t) -> Option<Self> {
+	/// Constructs a new error kind.
+	pub(crate) fn from_ffi(n: ffi::LIBMTP_error_number_t) -> Option<Self> {
 		match n {
 			ffi::LIBMTP_error_number_t::None => None,
 			ffi::LIBMTP_error_number_t::General => Some(Self::General),

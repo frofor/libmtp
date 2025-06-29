@@ -1,13 +1,13 @@
 [package]
 name = "libmtp"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["frofor <18nraywczifc@protonmail.com>"]
 edition = "2024"
 description = "A memory safe API for interacting with libmtp library"
 repository = "https://codeberg.org/frofor/libmtp"
 license = "MIT"
-keywords = ["mtp", "libmtp", "android"]
-categories = ["api-bindings", "filesystem", "os::android-apis"]
+keywords = ["mtp", "media", "file-transfer"]
+categories = ["api-bindings", "filesystem", "multimedia"]
 
 [profile.release]
 strip = true
