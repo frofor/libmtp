@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+Updated device API:
+- Changed return type of `music_folder_id`, `playlist_folder_id`, ... to `Option<u32>`.
+  `None` is returned if the default folder is not found.
+
 ## 0.3.0
 
 Added object API:

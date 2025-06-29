@@ -104,59 +104,75 @@ impl Device {
 	}
 
 	/// Retrieves the ID of the default music folder of the device.
-	///
-	/// If the default music folder was not found, the ID of the root folder will be returned.
-	pub fn music_folder_id(&self) -> u32 {
-		self.inner.default_music_folder
+	pub fn music_folder_id(&self) -> Option<u32> {
+		let id = self.inner.default_music_folder;
+		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
+			return None;
+		}
+		Some(id)
 	}
 
 	/// Retrieves the ID of the default playlists folder of the device.
-	///
-	/// If the default playlists folder was not found, the ID of the root folder will be returned.
-	pub fn playlist_folder_id(&self) -> u32 {
-		self.inner.default_playlist_folder
+	pub fn playlist_folder_id(&self) -> Option<u32> {
+		let id = self.inner.default_playlist_folder;
+		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
+			return None;
+		}
+		Some(id)
 	}
 
 	/// Retrieves the ID of the default pictures folder of the device.
-	///
-	/// If the default pictures folder was not found, the ID of the root folder will be returned.
-	pub fn picture_folder_id(&self) -> u32 {
-		self.inner.default_picture_folder
+	pub fn picture_folder_id(&self) -> Option<u32> {
+		let id = self.inner.default_picture_folder;
+		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
+			return None;
+		}
+		Some(id)
 	}
 
 	/// Retrieves the ID of the default videos folder of the device.
-	///
-	/// If the default videos folder was not found, the ID of the root folder will be returned.
-	pub fn video_folder_id(&self) -> u32 {
-		self.inner.default_video_folder
+	pub fn video_folder_id(&self) -> Option<u32> {
+		let id = self.inner.default_video_folder;
+		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
+			return None;
+		}
+		Some(id)
 	}
 
 	/// Retrieves the ID of the default organizers folder of the device.
-	///
-	/// If the default organizers folder was not found, the ID of the root folder will be returned.
-	pub fn organizer_folder_id(&self) -> u32 {
-		self.inner.default_organizer_folder
+	pub fn organizer_folder_id(&self) -> Option<u32> {
+		let id = self.inner.default_organizer_folder;
+		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
+			return None;
+		}
+		Some(id)
 	}
 
 	/// Retrieves the ID of the default ZENcast folder of the device.
-	///
-	/// If the default ZENcast folder was not found, the ID of the root folder will be returned.
-	pub fn zencast_folder_id(&self) -> u32 {
-		self.inner.default_zencast_folder
+	pub fn zencast_folder_id(&self) -> Option<u32> {
+		let id = self.inner.default_zencast_folder;
+		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
+			return None;
+		}
+		Some(id)
 	}
 
 	/// Retrieves the ID of the default albums folder of the device.
-	///
-	/// If the default albums folder was not found, the ID of the root folder will be returned.
-	pub fn album_folder_id(&self) -> u32 {
-		self.inner.default_album_folder
+	pub fn album_folder_id(&self) -> Option<u32> {
+		let id = self.inner.default_album_folder;
+		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
+			return None;
+		}
+		Some(id)
 	}
 
 	/// Retrieves the ID of the default texts folder of the device.
-	///
-	/// If the default texts folder was not found, the ID of the root folder will be returned.
-	pub fn text_folder_id(&self) -> u32 {
-		self.inner.default_text_folder
+	pub fn text_folder_id(&self) -> Option<u32> {
+		let id = self.inner.default_text_folder;
+		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
+			return None;
+		}
+		Some(id)
 	}
 
 	/// Retrieves an iterator over the storages of the device.
