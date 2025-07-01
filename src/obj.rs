@@ -1,8 +1,13 @@
 //! This module provides API for managing files and folders of storages.
 
+use crate::Result;
 use crate::Storage;
 use crate::ffi;
+use crate::obj;
 use std::ffi::CStr;
+use std::ffi::CString;
+use std::ffi::c_char;
+use std::ffi::c_void;
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Formatter;
@@ -18,10 +23,14 @@ pub enum Object<'a> {
 
 impl<'a> Object<'a> {
 	/// Constructs a new object.
-	pub(crate) fn from_ffi(storage: &'a Storage, ptr: *mut ffi::LIBMTP_file_t) -> Self {
+	pub(crate) fn from_ffi(
+		storage: &'a Storage,
+		ptr: *mut ffi::LIBMTP_file_t,
+		ownership: Ownership,
+	) -> Self {
 		let inner = unsafe { *ptr };
 		if Extension::from_ffi(inner.filetype).is_none() {
-			return Object::Folder(Folder::from_ffi(storage, ptr));
+			return Object::Folder(Folder::from_ffi(storage, ptr, ownership));
 		}
 		Object::File(File::from_ffi(storage, ptr))
 	}
@@ -36,12 +45,46 @@ pub struct Folder<'a> {
 	inner: ffi::LIBMTP_file_t,
 	/// The pointer to the underlying structure of the folder.
 	inner_ptr: *mut ffi::LIBMTP_file_t,
+	/// The responsibility of the folder for the pointer cleanup.
+	ownership: Ownership,
 }
 
 impl<'a> Folder<'a> {
 	/// Constructs a new folder.
-	pub(crate) fn from_ffi(owner: &'a Storage, ptr: *mut ffi::LIBMTP_file_t) -> Self {
-		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr }
+	pub(crate) fn from_ffi(
+		owner: &'a Storage,
+		ptr: *mut ffi::LIBMTP_file_t,
+		ownership: Ownership,
+	) -> Self {
+		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr, ownership }
+	}
+
+	/// Retrieves an iterator over the objects of the folder.
+	pub fn iter(&self) -> obj::Iter {
+		obj::Iter::new(self.owner, self.inner_ptr, Ownership::Borrows)
+	}
+
+	/// Creates a new folder inside the folder.
+	///
+	/// # Errors
+	///
+	/// An error is returned if a folder with the same name already exists inside the folder.
+	///
+	/// # Panics
+	///
+	/// Panics if the name of the folder contains a nul byte.
+	pub fn create_folder(&self, name: &str) -> Result<u32> {
+		let name = CString::new(name).expect("Folder name should not contain a nul byte");
+		let name_ptr = name.as_ptr() as *mut c_char;
+		let storage = self.owner();
+		let dev = storage.owner();
+		let dev_ptr = dev.inner_ptr();
+
+		let id = unsafe { ffi::LIBMTP_Create_Folder(dev_ptr, name_ptr, self.id(), storage.id()) };
+		if id == 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(id)
 	}
 
 	/// Retrieves the ID of the folder.
@@ -50,6 +93,10 @@ impl<'a> Folder<'a> {
 	}
 
 	/// Retrieves the name of the folder.
+	///
+	/// # Panics
+	///
+	/// Panics if the name of the folder is not a valid UTF-8.
 	pub fn name(&self) -> &str {
 		let name = self.inner.filename;
 		unsafe { CStr::from_ptr(name).to_str().expect("Folder name should be a valid UTF-8") }
@@ -65,7 +112,7 @@ impl<'a> Folder<'a> {
 		self.inner
 	}
 
-	/// Retrieves the pointer underlying structure of the folder.
+	/// Retrieves the pointer to the underlying structure of the folder.
 	pub(crate) fn inner_ptr(&self) -> *mut ffi::LIBMTP_file_t {
 		self.inner_ptr
 	}
@@ -74,6 +121,9 @@ impl<'a> Folder<'a> {
 #[doc(hidden)]
 impl<'a> Drop for Folder<'a> {
 	fn drop(&mut self) {
+		if self.ownership == Ownership::Borrows {
+			return;
+		}
 		unsafe {
 			ffi::LIBMTP_destroy_file_t(self.inner_ptr);
 		}
@@ -83,6 +133,15 @@ impl<'a> Drop for Folder<'a> {
 impl<'a> Debug for Folder<'a> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		f.debug_struct("Folder").field("id", &self.id()).field("name", &self.name()).finish()
+	}
+}
+
+impl<'a> IntoIterator for &'a Folder<'a> {
+	type Item = Object<'a>;
+	type IntoIter = obj::Iter<'a>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
 	}
 }
 
@@ -109,9 +168,13 @@ impl<'a> File<'a> {
 	}
 
 	/// Retrieves the name of the file.
+	///
+	/// # Panics
+	///
+	/// Panics if the name of the file is not a valid UTF-8.
 	pub fn name(&self) -> &str {
 		let name = self.inner.filename;
-		unsafe { CStr::from_ptr(name).to_str().expect("Folder name should be a valid UTF-8") }
+		unsafe { CStr::from_ptr(name).to_str().expect("File name should be a valid UTF-8") }
 	}
 
 	/// Retrieves the storage to which the file belongs.
@@ -145,17 +208,25 @@ impl<'a> Debug for File<'a> {
 	}
 }
 
-/// An iterator over the objects of the storage.
+/// An iterator over the objects of the folder.
 #[derive(Clone, Copy)]
 pub struct Iter<'a> {
+	/// The storage to which the object belongs.
 	storage: &'a Storage<'a>,
+	/// The pointer to the underlying structure of the object.
 	ptr: *mut ffi::LIBMTP_file_t,
+	/// The responsibility of the object for the pointer cleanup.
+	ownership: Ownership,
 }
 
 impl<'a> Iter<'a> {
 	/// Constructs a new objects iterator.
-	pub(crate) fn new(storage: &'a Storage, ptr: *mut ffi::LIBMTP_file_t) -> Self {
-		Self { storage, ptr }
+	pub(crate) fn new(
+		storage: &'a Storage,
+		ptr: *mut ffi::LIBMTP_file_t,
+		ownership: Ownership,
+	) -> Self {
+		Self { storage, ptr, ownership }
 	}
 }
 
@@ -167,7 +238,7 @@ impl<'a> Iterator for Iter<'a> {
 			return None;
 		}
 
-		let obj = Object::from_ffi(self.storage, self.ptr);
+		let obj = Object::from_ffi(self.storage, self.ptr, self.ownership);
 		self.ptr = unsafe { *self.ptr }.next;
 		Some(obj)
 	}
@@ -268,4 +339,13 @@ impl Extension {
 			_ => None,
 		}
 	}
+}
+
+/// A responsibility for the data cleanup.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum Ownership {
+	/// Instance owns the data and is responsible for its cleanup.
+	Owns,
+	/// Instance borrows the data and is not responsible for its cleanup.
+	Borrows,
 }

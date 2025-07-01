@@ -4,6 +4,7 @@ use crate::Device;
 use crate::Object;
 use crate::ffi;
 use crate::obj;
+use crate::obj::Ownership;
 use std::ffi::CStr;
 use std::fmt;
 use std::fmt::Debug;
@@ -13,14 +14,14 @@ use std::fmt::Formatter;
 /// A storage of the device.
 #[derive(Clone, Copy, Hash)]
 pub struct Storage<'a> {
-	/// The device that owns the storage.
+	/// The device to which the storage belongs.
 	owner: &'a Device,
 	/// The underlying struture of the storage.
 	inner: ffi::LIBMTP_devicestorage_t,
 }
 
 impl<'a> Storage<'a> {
-	/// Constructs a new storage from the underlying structure.
+	/// Constructs a new storage.
 	pub(crate) fn new(owner: &'a Device, inner: ffi::LIBMTP_devicestorage_t) -> Self {
 		Self { owner, inner }
 	}
@@ -53,13 +54,15 @@ impl<'a> Storage<'a> {
 				ffi::LIBMTP_FILES_AND_FOLDERS_ROOT,
 			)
 		};
-		obj::Iter::new(self, ptr)
+		obj::Iter::new(self, ptr, Ownership::Owns)
 	}
 
+	/// Retrieves the device to which the storage belongs.
 	pub(crate) fn owner(&self) -> &Device {
 		self.owner
 	}
 
+	/// Retrieves the underlying structure of the storage.
 	pub(crate) fn inner(&self) -> ffi::LIBMTP_devicestorage_struct {
 		self.inner
 	}
@@ -89,7 +92,9 @@ impl<'a> IntoIterator for &'a Storage<'a> {
 /// An iterator over the storages of the device.
 #[derive(Clone, Copy)]
 pub struct Iter<'a> {
+	/// The device to which the storage belongs.
 	dev: &'a Device,
+	/// The pointer to the underlying struture of the storage.
 	ptr: *mut ffi::LIBMTP_devicestorage_t,
 }
 

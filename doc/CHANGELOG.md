@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+Updated object API:
+- Fixed double free panic when dropping child folder.
+- Added `Folder::iter` for iterating over the objects of the folder.
+- Added `Folder::create_folder` for creating a new folder.
+
 ## 0.3.1
 
 Updated device API:

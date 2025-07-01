@@ -70,7 +70,7 @@ impl Device {
 	///
 	/// # Panics
 	///
-	/// Panics if `name` contains a nul byte.
+	/// Panics if the friendly name of the storage contains a nul byte.
 	pub fn rename(&self, name: &str) -> Result<()> {
 		let name = CString::new(name).expect("Name should not contain a nul byte");
 		let n = unsafe { ffi::LIBMTP_Set_Friendlyname(self.inner_ptr, name.as_ptr()) };
@@ -193,7 +193,7 @@ impl Device {
 	/// Pops the last error from the error stack.
 	///
 	/// After the execution the error stack will be cleared.
-	fn pop_err(&self) -> Option<Error> {
+	pub(crate) fn pop_err(&self) -> Option<Error> {
 		let stack = unsafe { ffi::LIBMTP_Get_Errorstack(self.inner_ptr) };
 		let err = Error::from_ffi(stack);
 		unsafe {
@@ -384,8 +384,11 @@ impl<'a> Display for Product<'a> {
 /// An iterator over the raw devices.
 #[derive(Clone, Copy)]
 pub struct RawIter {
+	/// The pointer to the underlying structure of the raw device.
 	ptr: *mut ffi::LIBMTP_raw_device_t,
+	/// Total number of the raw devices.
 	len: isize,
+	/// Offset to the current raw device.
 	off: isize,
 }
 
