@@ -52,7 +52,7 @@ impl Device {
 	/// Refreshes storages information for the device.
 	///
 	/// Call this function before displaying storage information.
-	pub fn refresh(&mut self) -> Result<()> {
+	pub fn refresh(&self) -> Result<()> {
 		let res = unsafe {
 			ffi::LIBMTP_Get_Storage(self.inner_ptr, ffi::LIBMTP_STORAGE_SORTBY_NOTSORTED)
 		};
