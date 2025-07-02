@@ -435,7 +435,7 @@ pub(crate) struct LIBMTP_file_struct {
 	pub(crate) storage_id: u32,
 	pub(crate) filename: *mut c_char,
 	pub(crate) filesize: u64,
-	pub(crate) moificationdate: time_t,
+	pub(crate) modificationdate: time_t,
 	pub(crate) filetype: LIBMTP_filetype_t,
 	pub(crate) next: *mut LIBMTP_file_t,
 }

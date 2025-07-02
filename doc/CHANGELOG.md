@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+Updated object API:
+- Added `Folder::copy_file_from_host` method to copy the file from the host computer to the folder.
+- Added `File::copy_to_host` method to copy the file to the host computer.
+
 ## 0.3.5
 
 Updated device API:

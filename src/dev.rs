@@ -51,12 +51,14 @@ impl Device {
 
 	/// Refreshes storages information for the device.
 	///
-	/// Call this function before displaying storage information.
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
 	pub fn refresh(&self) -> Result<()> {
-		let res = unsafe {
+		let n = unsafe {
 			ffi::LIBMTP_Get_Storage(self.inner_ptr, ffi::LIBMTP_STORAGE_SORTBY_NOTSORTED)
 		};
-		if res != 0 {
+		if n != 0 {
 			return Err(self.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -66,7 +68,8 @@ impl Device {
 	///
 	/// # Errors
 	///
-	/// Returns an error if the device doesn't have a support for friendly names or if the friendly name was not found.
+	/// Returns an error if the device doesn't have a support for friendly names or if the
+	/// operation has failed.
 	///
 	/// # Panics
 	///
@@ -84,7 +87,8 @@ impl Device {
 	///
 	/// # Errors
 	///
-	/// Returns an error if the device doesn't have a support for friendly names or if the friendly name was not found.
+	/// Returns an error if the device doesn't have a support for friendly names, if the
+	/// friendly name was not found or if the operation has failed.
 	pub fn name(&self) -> Result<String> {
 		let ptr = unsafe { ffi::LIBMTP_Get_Friendlyname(self.inner_ptr) };
 		if ptr.is_null() {
@@ -107,8 +111,8 @@ impl Device {
 		let mut now = 0;
 		let mut max = 0;
 
-		let res = unsafe { ffi::LIBMTP_Get_Batterylevel(self.inner_ptr, &mut max, &mut now) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Get_Batterylevel(self.inner_ptr, &mut max, &mut now) };
+		if n != 0 {
 			return Err(self.pop_err().unwrap_or_default());
 		}
 		Ok(Battery::new(now, max))
@@ -202,8 +206,6 @@ impl Device {
 	}
 
 	/// Pops the last error from the error stack.
-	///
-	/// After the execution the error stack will be cleared.
 	pub(crate) fn pop_err(&self) -> Option<Error> {
 		let stack = unsafe { ffi::LIBMTP_Get_Errorstack(self.inner_ptr) };
 		let err = Error::from_ffi(stack);

@@ -2,14 +2,20 @@
 
 use crate::Result;
 use crate::Storage;
+use crate::convert::path_to_cstring;
 use crate::ffi;
 use crate::obj;
+use libc::time_t;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::ffi::c_char;
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Formatter;
+use std::fs;
+use std::path::Path;
+use std::ptr;
+use std::time::UNIX_EPOCH;
 
 /// A file or a folder on the storage.
 #[derive(Clone, Hash, Debug)]
@@ -38,7 +44,8 @@ impl<'a> Object<'a> {
 	///
 	/// # Errors
 	///
-	/// An error is returned if a sibling object with the same name already exists.
+	/// Returns an error if a sibling object with the same name already exists or if the
+	/// operation has failed.
 	///
 	/// # Panics
 	///
@@ -54,7 +61,8 @@ impl<'a> Object<'a> {
 	///
 	/// # Errors
 	///
-	/// Returns an error if the operation has failed.
+	/// Returns an error if an object with the same name already exists in the other folder or
+	/// if the operation has failed.
 	pub fn move_to(&self, parent: Folder) -> Result<()> {
 		match self {
 			Self::Folder(f) => f.move_to(parent),
@@ -66,7 +74,8 @@ impl<'a> Object<'a> {
 	///
 	/// # Errors
 	///
-	/// Returns an error if the operation has failed.
+	/// Returns an error if an object with the same name already exists in the other folder or
+	/// if the operation has failed.
 	pub fn copy_to(&self, parent: Folder) -> Result<()> {
 		match self {
 			Self::Folder(f) => f.copy_to(parent),
@@ -130,7 +139,8 @@ impl<'a> Folder<'a> {
 	///
 	/// # Errors
 	///
-	/// An error is returned if a sibling object with the same name already exists.
+	/// Returns an error if a sibling object with the same name already exists or if the
+	/// operation has failed.
 	///
 	/// # Panics
 	///
@@ -140,8 +150,8 @@ impl<'a> Folder<'a> {
 		let name_ptr = name.as_ptr() as *mut c_char;
 		let dev = self.owner().owner();
 
-		let res = unsafe { ffi::LIBMTP_Set_File_Name(dev.inner_ptr(), self.inner_ptr, name_ptr) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Set_File_Name(dev.inner_ptr(), self.inner_ptr, name_ptr) };
+		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -151,14 +161,15 @@ impl<'a> Folder<'a> {
 	///
 	/// # Errors
 	///
-	/// Returns an error if the operation has failed.
+	/// Returns an error if an object with the same name already exists in the other folder or
+	/// if the operation has failed.
 	pub fn move_to(&self, parent: Folder) -> Result<()> {
 		let storage = self.owner();
 		let dev = storage.owner();
 		let dev_ptr = dev.inner_ptr();
 
-		let res = unsafe { ffi::LIBMTP_Move_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Move_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
+		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -168,14 +179,15 @@ impl<'a> Folder<'a> {
 	///
 	/// # Errors
 	///
-	/// Returns an error if the operation has failed.
+	/// Returns an error if an object with the same name already exists in the other folder or
+	/// if the operation has failed.
 	pub fn copy_to(&self, parent: Folder) -> Result<()> {
 		let storage = self.owner();
 		let dev = storage.owner();
 		let dev_ptr = dev.inner_ptr();
 
-		let res = unsafe { ffi::LIBMTP_Copy_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Copy_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
+		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -189,8 +201,8 @@ impl<'a> Folder<'a> {
 	pub fn delete(&self) -> Result<()> {
 		let dev = self.owner().owner();
 
-		let res = unsafe { ffi::LIBMTP_Delete_Object(dev.inner_ptr(), self.id()) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Delete_Object(dev.inner_ptr(), self.id()) };
+		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -200,7 +212,8 @@ impl<'a> Folder<'a> {
 	///
 	/// # Errors
 	///
-	/// An error is returned if a child object with the same name already exists.
+	/// Returns an error if a child object with the same name already exists or if the
+	/// operation has failed.
 	///
 	/// # Panics
 	///
@@ -217,6 +230,63 @@ impl<'a> Folder<'a> {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(id)
+	}
+
+	/// Copies the file from the host computer to the folder.
+	///
+	/// # Errors
+	///
+	/// Returns an error if reading the file's metadata has failed or if the operation has
+	/// failed.
+	///
+	/// # Panics
+	///
+	/// Panics if the path doesn't end in file name, or if file name is not a valid UTF-8.
+	pub fn copy_file_from_host<P>(&self, path: P, kind: FileKind) -> Result<()>
+	where
+		P: AsRef<Path>,
+	{
+		let path = path.as_ref();
+
+		let name = CString::new(
+			path.file_name()
+				.expect("Path should end in filename")
+				.to_str()
+				.expect("File name should be a valid UTF-8"),
+		)
+		.expect("Path should not contain a nul byte");
+
+		let metadata = fs::metadata(path)?;
+
+		let file = unsafe { &mut *ffi::LIBMTP_new_file_t() };
+		file.parent_id = self.id();
+		file.storage_id = self.owner().id();
+		file.filename = name.as_ptr() as *mut i8;
+		file.filesize = metadata.len();
+		file.modificationdate = metadata
+			.modified()
+			.unwrap_or(UNIX_EPOCH)
+			.duration_since(UNIX_EPOCH)
+			.expect("Modification date should not be before Unix epoch")
+			.as_secs() as time_t;
+		file.filetype = kind.to_ffi();
+
+		let dev = self.owner().owner();
+		let path = path_to_cstring(path);
+
+		let n = unsafe {
+			ffi::LIBMTP_Send_File_From_File(
+				dev.inner_ptr(),
+				path.as_ptr() as *const c_char,
+				file as *mut _,
+				None,
+				ptr::null(),
+			)
+		};
+		if n != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
 	}
 
 	/// Retrieves an iterator over the objects of the folder.
@@ -302,7 +372,8 @@ impl<'a> File<'a> {
 	///
 	/// # Errors
 	///
-	/// An error is returned if a sibling object with the same name already exists.
+	/// Returns an error if a sibling object with the same name already exists or if the
+	/// operation has failed.
 	///
 	/// # Panics
 	///
@@ -312,8 +383,8 @@ impl<'a> File<'a> {
 		let name_ptr = name.as_ptr() as *mut c_char;
 		let dev = self.owner().owner();
 
-		let res = unsafe { ffi::LIBMTP_Set_File_Name(dev.inner_ptr(), self.inner_ptr, name_ptr) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Set_File_Name(dev.inner_ptr(), self.inner_ptr, name_ptr) };
+		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -323,14 +394,15 @@ impl<'a> File<'a> {
 	///
 	/// # Errors
 	///
-	/// Returns an error if the operation has failed.
+	/// Returns an error if an object with the same name already exists in the other folder or
+	/// if the operation has failed.
 	pub fn move_to(&self, parent: Folder) -> Result<()> {
 		let storage = self.owner();
 		let dev = storage.owner();
 		let dev_ptr = dev.inner_ptr();
 
-		let res = unsafe { ffi::LIBMTP_Move_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Move_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
+		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -340,14 +412,42 @@ impl<'a> File<'a> {
 	///
 	/// # Errors
 	///
-	/// Returns an error if the operation has failed.
+	/// Returns an error if an object with the same name already exists in the other folder or
+	/// if the operation has failed.
 	pub fn copy_to(&self, parent: Folder) -> Result<()> {
 		let storage = self.owner();
 		let dev = storage.owner();
 		let dev_ptr = dev.inner_ptr();
 
-		let res = unsafe { ffi::LIBMTP_Copy_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Copy_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
+		if n != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
+	/// Copies the file to the host computer.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn copy_to_host<P>(&self, path: P) -> Result<()>
+	where
+		P: AsRef<Path>,
+	{
+		let dev = self.owner().owner();
+		let path = path_to_cstring(path.as_ref());
+
+		let n = unsafe {
+			ffi::LIBMTP_Get_File_To_File(
+				dev.inner_ptr(),
+				self.id(),
+				path.as_ptr() as *const i8,
+				None,
+				ptr::null(),
+			)
+		};
+		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -361,8 +461,8 @@ impl<'a> File<'a> {
 	pub fn delete(&self) -> Result<()> {
 		let dev = self.owner().owner();
 
-		let res = unsafe { ffi::LIBMTP_Delete_Object(dev.inner_ptr(), self.id()) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Delete_Object(dev.inner_ptr(), self.id()) };
+		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())
@@ -511,6 +611,7 @@ pub enum FileKind {
 }
 
 impl FileKind {
+	/// Constructs a new file kind.
 	pub(crate) fn from_ffi(filetype: ffi::LIBMTP_filetype_t) -> Option<Self> {
 		match filetype {
 			ffi::LIBMTP_filetype_t::Wav => Some(Self::Wav),
@@ -556,6 +657,54 @@ impl FileKind {
 			ffi::LIBMTP_filetype_t::Jpx => Some(Self::Jpx),
 			ffi::LIBMTP_filetype_t::Unknown => Some(Self::Other),
 			_ => None,
+		}
+	}
+
+	/// Converts the file kind to the underlying enumerator.
+	pub(crate) fn to_ffi(self) -> ffi::LIBMTP_filetype_t {
+		match self {
+			Self::Wav => ffi::LIBMTP_filetype_t::Wav,
+			Self::Mp3 => ffi::LIBMTP_filetype_t::Mp3,
+			Self::Wma => ffi::LIBMTP_filetype_t::Wma,
+			Self::Ogg => ffi::LIBMTP_filetype_t::Ogg,
+			Self::Audible => ffi::LIBMTP_filetype_t::Audible,
+			Self::Mp4 => ffi::LIBMTP_filetype_t::Mp4,
+			Self::OtherAudio => ffi::LIBMTP_filetype_t::UndefAudio,
+			Self::Wmv => ffi::LIBMTP_filetype_t::Wmv,
+			Self::Avi => ffi::LIBMTP_filetype_t::Avi,
+			Self::Mpeg => ffi::LIBMTP_filetype_t::Mpeg,
+			Self::Asf => ffi::LIBMTP_filetype_t::Asf,
+			Self::Qt => ffi::LIBMTP_filetype_t::Qt,
+			Self::OtherVideo => ffi::LIBMTP_filetype_t::UndefVideo,
+			Self::Jpeg => ffi::LIBMTP_filetype_t::Jpeg,
+			Self::Jfif => ffi::LIBMTP_filetype_t::Jfif,
+			Self::Tiff => ffi::LIBMTP_filetype_t::Tiff,
+			Self::Bmp => ffi::LIBMTP_filetype_t::Bmp,
+			Self::Gif => ffi::LIBMTP_filetype_t::Gif,
+			Self::Pict => ffi::LIBMTP_filetype_t::Pict,
+			Self::Png => ffi::LIBMTP_filetype_t::Png,
+			Self::VCalendar1 => ffi::LIBMTP_filetype_t::VCalendar1,
+			Self::VCalendar2 => ffi::LIBMTP_filetype_t::VCalendar2,
+			Self::VCard2 => ffi::LIBMTP_filetype_t::VCard2,
+			Self::VCard3 => ffi::LIBMTP_filetype_t::VCard3,
+			Self::Wim => ffi::LIBMTP_filetype_t::WindowsImageFormat,
+			Self::Batch => ffi::LIBMTP_filetype_t::WinExec,
+			Self::Text => ffi::LIBMTP_filetype_t::Text,
+			Self::Html => ffi::LIBMTP_filetype_t::Html,
+			Self::Firmware => ffi::LIBMTP_filetype_t::Firmware,
+			Self::Aac => ffi::LIBMTP_filetype_t::Aac,
+			Self::MediaCard => ffi::LIBMTP_filetype_t::MediaCard,
+			Self::Flac => ffi::LIBMTP_filetype_t::Flac,
+			Self::Mp2 => ffi::LIBMTP_filetype_t::Mp2,
+			Self::M4a => ffi::LIBMTP_filetype_t::M4a,
+			Self::Doc => ffi::LIBMTP_filetype_t::Doc,
+			Self::Xml => ffi::LIBMTP_filetype_t::Xml,
+			Self::Xls => ffi::LIBMTP_filetype_t::Xls,
+			Self::Ppt => ffi::LIBMTP_filetype_t::Ppt,
+			Self::Mht => ffi::LIBMTP_filetype_t::Mht,
+			Self::Jp2 => ffi::LIBMTP_filetype_t::Jp2,
+			Self::Jpx => ffi::LIBMTP_filetype_t::Jpx,
+			Self::Other => ffi::LIBMTP_filetype_t::Unknown,
 		}
 	}
 }

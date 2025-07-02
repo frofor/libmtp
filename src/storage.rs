@@ -37,12 +37,12 @@ impl<'a> Storage<'a> {
 	///
 	/// # Errors
 	///
-	/// Returns an error if the device doesn't support storage formatting or if the operation
-	/// has failed.
+	/// Returns an error if the device doesn't have a support for storage formatting or if the
+	/// operation has failed.
 	pub fn format(&self) -> Result<()> {
 		let dev = self.owner();
-		let res = unsafe { ffi::LIBMTP_Format_Storage(dev.inner_ptr(), self.inner_ptr) };
-		if res != 0 {
+		let n = unsafe { ffi::LIBMTP_Format_Storage(dev.inner_ptr(), self.inner_ptr) };
+		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())

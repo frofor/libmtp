@@ -6,6 +6,7 @@ use std::error;
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::io;
 use std::result;
 
 /// Specialized Result type used within the crate.
@@ -61,6 +62,13 @@ impl Default for Error {
 	}
 }
 
+#[doc(hidden)]
+impl From<io::Error> for Error {
+	fn from(e: io::Error) -> Self {
+		Self::new(Kind::Io, &format!("{e}"))
+	}
+}
+
 /// Category for an error used within the crate.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Kind {
@@ -80,6 +88,8 @@ pub enum Kind {
 	Connecting,
 	/// The operation was cancelled.
 	Cancelled,
+	/// Input/output error.
+	Io,
 	/// Unknown error.
 	Unknown,
 }
