@@ -98,9 +98,20 @@ impl Device {
 		Ok(name)
 	}
 
-	/// Retrieves the maximum battery percentage of the device.
-	pub fn max_battery_percent(&self) -> u8 {
-		self.inner.maximum_battery_level
+	/// Retrieves the battery of the device.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn battery(&self) -> Result<Battery> {
+		let mut now = 0;
+		let mut max = 0;
+
+		let res = unsafe { ffi::LIBMTP_Get_Batterylevel(self.inner_ptr, &mut max, &mut now) };
+		if res != 0 {
+			return Err(self.pop_err().unwrap_or_default());
+		}
+		Ok(Battery::new(now, max))
 	}
 
 	/// Retrieves the ID of the default music folder of the device.
@@ -215,7 +226,7 @@ impl Drop for Device {
 impl Debug for Device {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		f.debug_struct("Device")
-			.field("max_battery_percent", &self.max_battery_percent())
+			.field("battery", &self.battery())
 			.field("music_folder_id", &self.music_folder_id())
 			.field("playlist_folder_id", &self.playlist_folder_id())
 			.field("picture_folder_id", &self.picture_folder_id())
@@ -225,6 +236,32 @@ impl Debug for Device {
 			.field("album_folder_id", &self.album_folder_id())
 			.field("text_folder_id", &self.text_folder_id())
 			.finish()
+	}
+}
+
+/// The battery of the device.
+#[derive(Clone, Copy, Hash, Debug)]
+pub struct Battery {
+	/// The current percentage of the battery.
+	now: u8,
+	/// The maximum percentage of the battery.
+	max: u8,
+}
+
+impl Battery {
+	/// Constructs a new battery.
+	pub(crate) fn new(now: u8, max: u8) -> Self {
+		Self { now, max }
+	}
+
+	/// Retrieves the current percentage of the battery.
+	pub fn now(&self) -> u8 {
+		self.now
+	}
+
+	/// Retrieves the maximum percentage of the battery.
+	pub fn max(&self) -> u8 {
+		self.max
 	}
 }
 

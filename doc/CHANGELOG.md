@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.5
+
+Updated device API:
+- Replaced `max_battery_percent` method with `battery` method for retrieving the battery of the device.
+  `battery` method returns `Battery` struct that contains the current and the maximum battery percentage.
+
 ## 0.3.4
 
 Updated storage API:
