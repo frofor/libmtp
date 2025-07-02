@@ -31,18 +31,18 @@ fn main() -> libmtp::Result<()> {
 }
 ```
 
-For more examples, see [examples](examples/).
+For more examples, see [examples](https://codeberg.org/frofor/libmtp/src/branch/stable/examples).
 
 ## Changelog
 
-For a release history, see [CHANGELOG.md](doc/CHANGELOG.md).
+For a release history, see [CHANGELOG.md](https://codeberg.org/frofor/libmtp/src/branch/stable/doc/CHANGELOG.md).
 
 ## Contributing
 
-For a contibuting guide, see [CONTRIBUTING.md](doc/CONTRIBUTING.md).
+For a contibuting guide, see [CONTRIBUTING.md](https://codeberg.org/frofor/libmtp/src/branch/stable/doc/CONTRIBUTING.md).
 
 ## License
 
 This crate is distributed under the terms of MIT License.
 
-See [LICENSE](LICENSE) for details.
+See [LICENSE](https://codeberg.org/frofor/libmtp/src/branch/stable/LICENSE) for details.
