@@ -1,6 +1,6 @@
 [package]
 name = "libmtp"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["frofor <18nraywczifc@protonmail.com>"]
 edition = "2024"
 description = "A memory safe API for interacting with libmtp library"

@@ -61,11 +61,6 @@ impl<'a> Storage<'a> {
 	pub(crate) fn owner(&self) -> &Device {
 		self.owner
 	}
-
-	/// Retrieves the underlying structure of the storage.
-	pub(crate) fn inner(&self) -> ffi::LIBMTP_devicestorage_struct {
-		self.inner
-	}
 }
 
 impl<'a> Display for Storage<'a> {

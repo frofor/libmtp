@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3
+
+Updated object API:
+- Added `id` and `name` methods to `Object`.
+- Added `rename` method to `Object`, `Folder` and `File`.
+- Added `File::kind` method for retrieving the kind of the file.
+- Added `File::size` method for retrieving the total size in bytes of the file.
+
 ## 0.3.2
 
 Updated object API:

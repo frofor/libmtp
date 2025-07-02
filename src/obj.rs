@@ -7,7 +7,6 @@ use crate::obj;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::ffi::c_char;
-use std::ffi::c_void;
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Formatter;
@@ -29,10 +28,42 @@ impl<'a> Object<'a> {
 		ownership: Ownership,
 	) -> Self {
 		let inner = unsafe { *ptr };
-		if Extension::from_ffi(inner.filetype).is_none() {
-			return Object::Folder(Folder::from_ffi(storage, ptr, ownership));
+		if FileKind::from_ffi(inner.filetype).is_none() {
+			return Self::Folder(Folder::from_ffi(storage, ptr, ownership));
 		}
-		Object::File(File::from_ffi(storage, ptr))
+		Self::File(File::from_ffi(storage, ptr))
+	}
+
+	/// Changes the name of the object.
+	///
+	/// # Errors
+	///
+	/// An error is returned if a sibling object with the same name already exists.
+	///
+	/// # Panics
+	///
+	/// Panics if the name of the object contains a nul byte.
+	pub fn rename(&self, name: &str) -> Result<()> {
+		match self {
+			Self::Folder(f) => f.rename(name),
+			Self::File(f) => f.rename(name),
+		}
+	}
+
+	/// Retrieves the ID of the object.
+	pub fn id(&self) -> u32 {
+		match self {
+			Self::Folder(f) => f.id(),
+			Self::File(f) => f.id(),
+		}
+	}
+
+	/// Retrieves the name of the object.
+	pub fn name(&self) -> &str {
+		match self {
+			Self::Folder(f) => f.name(),
+			Self::File(f) => f.name(),
+		}
 	}
 }
 
@@ -59,16 +90,33 @@ impl<'a> Folder<'a> {
 		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr, ownership }
 	}
 
-	/// Retrieves an iterator over the objects of the folder.
-	pub fn iter(&self) -> obj::Iter {
-		obj::Iter::new(self.owner, self.inner_ptr, Ownership::Borrows)
-	}
-
-	/// Creates a new folder inside the folder.
+	/// Changes the name of the foler.
 	///
 	/// # Errors
 	///
-	/// An error is returned if a folder with the same name already exists inside the folder.
+	/// An error is returned if a sibling object with the same name already exists.
+	///
+	/// # Panics
+	///
+	/// Panics if the name of the folder contains a nul byte.
+	pub fn rename<'b>(&self, name: &'b str) -> Result<()> {
+		let name = CString::new(name).expect("Folder name should not contain a nul byte");
+		let name_ptr = name.as_ptr() as *mut c_char;
+		let dev = self.owner().owner();
+
+		let res = unsafe { ffi::LIBMTP_Set_File_Name(dev.inner_ptr(), self.inner_ptr, name_ptr) };
+		if res != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
+	/// Creates a new child folder inside the folder.
+	/// Returns the ID of the created folder.
+	///
+	/// # Errors
+	///
+	/// An error is returned if a child object with the same name already exists.
 	///
 	/// # Panics
 	///
@@ -85,6 +133,11 @@ impl<'a> Folder<'a> {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(id)
+	}
+
+	/// Retrieves an iterator over the objects of the folder.
+	pub fn iter(&self) -> obj::Iter {
+		obj::Iter::new(self.owner, self.inner_ptr, Ownership::Borrows)
 	}
 
 	/// Retrieves the ID of the folder.
@@ -105,16 +158,6 @@ impl<'a> Folder<'a> {
 	/// Retrieves the storage to which the folder belongs.
 	pub(crate) fn owner(&self) -> &Storage {
 		self.owner
-	}
-
-	/// Retrieves the underlying structure of the folder.
-	pub(crate) fn inner(&self) -> ffi::LIBMTP_file_t {
-		self.inner
-	}
-
-	/// Retrieves the pointer to the underlying structure of the folder.
-	pub(crate) fn inner_ptr(&self) -> *mut ffi::LIBMTP_file_t {
-		self.inner_ptr
 	}
 }
 
@@ -145,6 +188,15 @@ impl<'a> IntoIterator for &'a Folder<'a> {
 	}
 }
 
+/// A responsibility for the data cleanup.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum Ownership {
+	/// Instance owns the data and is responsible for its cleanup.
+	Owns,
+	/// Instance borrows the data and is not responsible for its cleanup.
+	Borrows,
+}
+
 /// A file on the storage.
 #[derive(Clone, Hash)]
 pub struct File<'a> {
@@ -162,6 +214,27 @@ impl<'a> File<'a> {
 		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr }
 	}
 
+	/// Changes the name of the file.
+	///
+	/// # Errors
+	///
+	/// An error is returned if a sibling object with the same name already exists.
+	///
+	/// # Panics
+	///
+	/// Panics if the name of the file contains a nul byte.
+	pub fn rename<'b>(&self, name: &'b str) -> Result<()> {
+		let name = CString::new(name).expect("File name should not contain a nul byte");
+		let name_ptr = name.as_ptr() as *mut c_char;
+		let dev = self.owner().owner();
+
+		let res = unsafe { ffi::LIBMTP_Set_File_Name(dev.inner_ptr(), self.inner_ptr, name_ptr) };
+		if res != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
 	/// Retrieves the ID of the file.
 	pub fn id(&self) -> u32 {
 		self.inner.item_id
@@ -177,19 +250,20 @@ impl<'a> File<'a> {
 		unsafe { CStr::from_ptr(name).to_str().expect("File name should be a valid UTF-8") }
 	}
 
+	/// Retrieves the kind of the file.
+	pub fn kind(&self) -> FileKind {
+		FileKind::from_ffi(self.inner.filetype)
+			.expect("File type should not be a folder, an album or a playlist")
+	}
+
+	/// Retrieves the total size in bytes of the file.
+	pub fn size(&self) -> u64 {
+		self.inner.filesize
+	}
+
 	/// Retrieves the storage to which the file belongs.
 	pub(crate) fn owner(&self) -> &Storage {
 		self.owner
-	}
-
-	/// Retrieves the underlying structure of the file.
-	pub(crate) fn inner(&self) -> ffi::LIBMTP_file_t {
-		self.inner
-	}
-
-	/// Retrieves the pointer to the underlying structure of the file.
-	pub(crate) fn inner_ptr(&self) -> *mut ffi::LIBMTP_file_t {
-		self.inner_ptr
 	}
 }
 
@@ -204,7 +278,152 @@ impl<'a> Drop for File<'a> {
 
 impl<'a> Debug for File<'a> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-		f.debug_struct("File").field("id", &self.id()).field("name", &self.name()).finish()
+		f.debug_struct("File")
+			.field("id", &self.id())
+			.field("name", &self.name())
+			.field("kind", &self.kind())
+			.field("size", &self.size())
+			.finish()
+	}
+}
+
+/// The kind of the file.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum FileKind {
+	/// Waveform Audio format.
+	Wav,
+	/// MPEG Audio Layer III.
+	Mp3,
+	/// Windows Media Audio.
+	Wma,
+	/// Ogg Vorbis Audio.
+	Ogg,
+	/// Audible Audio.
+	Audible,
+	/// MPEG-4 Part 14.
+	Mp4,
+	/// Other audio format.
+	OtherAudio,
+	/// Windows Media Video.
+	Wmv,
+	/// Audio Video Interleave.
+	Avi,
+	/// Moving Picture Experts Group.
+	Mpeg,
+	/// Advanced Streaming Format.
+	Asf,
+	/// QuickTime.
+	Qt,
+	/// Other video format.
+	OtherVideo,
+	/// Joint Photographic Experts Group.
+	Jpeg,
+	/// JPEG File Interchange Format.
+	Jfif,
+	/// Tagged Image File Format.
+	Tiff,
+	/// Bitmap.
+	Bmp,
+	/// Graphics Interchange Format.
+	Gif,
+	/// PICT.
+	Pict,
+	/// Portable Network Graphics.
+	Png,
+	/// vCalendar 1.0.
+	VCalendar1,
+	/// vCalendar 2.0.
+	VCalendar2,
+	/// vCard 1.0.
+	VCard2,
+	/// vCard 2.0.
+	VCard3,
+	/// Windows Imaging Format.
+	Wim,
+	/// Windows Batch file.
+	Batch,
+	/// Plain text.
+	Text,
+	/// Hypertext Markup Language.
+	Html,
+	/// Firmware file.
+	Firmware,
+	/// Advanced Audio Codec.
+	Aac,
+	/// Media Card Format.
+	MediaCard,
+	/// Free Lossless Audio Codec.
+	Flac,
+	/// MPEG Audio Layer II.
+	Mp2,
+	/// MPEG-4 Audio.
+	M4a,
+	/// Microsoft Word Document.
+	Doc,
+	/// Extensible Markup Language.
+	Xml,
+	/// Microsoft Excel Spreadsheet.
+	Xls,
+	/// Microsoft PowerPoint Presentation.
+	Ppt,
+	/// MIME encapsulation of aggregate HTML documents.
+	Mht,
+	/// JPEG 2000 Image Format.
+	Jp2,
+	/// JPEG 2000 Image Format (Part 1).
+	Jpx,
+	/// Other file kind.
+	#[default]
+	Other,
+}
+
+impl FileKind {
+	pub(crate) fn from_ffi(filetype: ffi::LIBMTP_filetype_t) -> Option<Self> {
+		match filetype {
+			ffi::LIBMTP_filetype_t::Wav => Some(Self::Wav),
+			ffi::LIBMTP_filetype_t::Mp3 => Some(Self::Mp3),
+			ffi::LIBMTP_filetype_t::Wma => Some(Self::Wma),
+			ffi::LIBMTP_filetype_t::Ogg => Some(Self::Ogg),
+			ffi::LIBMTP_filetype_t::Audible => Some(Self::Audible),
+			ffi::LIBMTP_filetype_t::Mp4 => Some(Self::Mp4),
+			ffi::LIBMTP_filetype_t::UndefAudio => Some(Self::OtherAudio),
+			ffi::LIBMTP_filetype_t::Wmv => Some(Self::Wmv),
+			ffi::LIBMTP_filetype_t::Avi => Some(Self::Avi),
+			ffi::LIBMTP_filetype_t::Mpeg => Some(Self::Mpeg),
+			ffi::LIBMTP_filetype_t::Asf => Some(Self::Asf),
+			ffi::LIBMTP_filetype_t::Qt => Some(Self::Qt),
+			ffi::LIBMTP_filetype_t::UndefVideo => Some(Self::OtherVideo),
+			ffi::LIBMTP_filetype_t::Jpeg => Some(Self::Jpeg),
+			ffi::LIBMTP_filetype_t::Jfif => Some(Self::Jfif),
+			ffi::LIBMTP_filetype_t::Tiff => Some(Self::Tiff),
+			ffi::LIBMTP_filetype_t::Bmp => Some(Self::Bmp),
+			ffi::LIBMTP_filetype_t::Gif => Some(Self::Gif),
+			ffi::LIBMTP_filetype_t::Pict => Some(Self::Pict),
+			ffi::LIBMTP_filetype_t::Png => Some(Self::Png),
+			ffi::LIBMTP_filetype_t::VCalendar1 => Some(Self::VCalendar1),
+			ffi::LIBMTP_filetype_t::VCalendar2 => Some(Self::VCalendar2),
+			ffi::LIBMTP_filetype_t::VCard2 => Some(Self::VCard2),
+			ffi::LIBMTP_filetype_t::VCard3 => Some(Self::VCard3),
+			ffi::LIBMTP_filetype_t::WindowsImageFormat => Some(Self::Wim),
+			ffi::LIBMTP_filetype_t::WinExec => Some(Self::Batch),
+			ffi::LIBMTP_filetype_t::Text => Some(Self::Text),
+			ffi::LIBMTP_filetype_t::Html => Some(Self::Html),
+			ffi::LIBMTP_filetype_t::Firmware => Some(Self::Firmware),
+			ffi::LIBMTP_filetype_t::Aac => Some(Self::Aac),
+			ffi::LIBMTP_filetype_t::MediaCard => Some(Self::MediaCard),
+			ffi::LIBMTP_filetype_t::Flac => Some(Self::Flac),
+			ffi::LIBMTP_filetype_t::Mp2 => Some(Self::Mp2),
+			ffi::LIBMTP_filetype_t::M4a => Some(Self::M4a),
+			ffi::LIBMTP_filetype_t::Doc => Some(Self::Doc),
+			ffi::LIBMTP_filetype_t::Xml => Some(Self::Xml),
+			ffi::LIBMTP_filetype_t::Xls => Some(Self::Xls),
+			ffi::LIBMTP_filetype_t::Ppt => Some(Self::Ppt),
+			ffi::LIBMTP_filetype_t::Mht => Some(Self::Mht),
+			ffi::LIBMTP_filetype_t::Jp2 => Some(Self::Jp2),
+			ffi::LIBMTP_filetype_t::Jpx => Some(Self::Jpx),
+			ffi::LIBMTP_filetype_t::Unknown => Some(Self::Other),
+			_ => None,
+		}
 	}
 }
 
@@ -242,110 +461,4 @@ impl<'a> Iterator for Iter<'a> {
 		self.ptr = unsafe { *self.ptr }.next;
 		Some(obj)
 	}
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub enum Extension {
-	Wav,
-	Mp3,
-	Wma,
-	Ogg,
-	Audible,
-	Mp4,
-	UndefAudio,
-	Wmv,
-	Avi,
-	Mpeg,
-	Asf,
-	Qt,
-	UndefVideo,
-	Jpeg,
-	Jfif,
-	Tiff,
-	Bmp,
-	Gif,
-	Pict,
-	Png,
-	VCalendar1,
-	VCalendar2,
-	VCard2,
-	VCard3,
-	WindowsImageFormat,
-	WinExec,
-	Text,
-	Html,
-	Firmware,
-	Aac,
-	MediaCard,
-	Flac,
-	Mp2,
-	M4a,
-	Doc,
-	Xml,
-	Xls,
-	Ppt,
-	Mht,
-	Jp2,
-	Jpx,
-	#[default]
-	Other,
-}
-
-impl Extension {
-	pub(crate) fn from_ffi(filetype: ffi::LIBMTP_filetype_t) -> Option<Self> {
-		match filetype {
-			ffi::LIBMTP_filetype_t::Wav => Some(Self::Wav),
-			ffi::LIBMTP_filetype_t::Mp3 => Some(Self::Mp3),
-			ffi::LIBMTP_filetype_t::Wma => Some(Self::Wma),
-			ffi::LIBMTP_filetype_t::Ogg => Some(Self::Ogg),
-			ffi::LIBMTP_filetype_t::Audible => Some(Self::Audible),
-			ffi::LIBMTP_filetype_t::Mp4 => Some(Self::Mp4),
-			ffi::LIBMTP_filetype_t::UndefAudio => Some(Self::UndefAudio),
-			ffi::LIBMTP_filetype_t::Wmv => Some(Self::Wmv),
-			ffi::LIBMTP_filetype_t::Avi => Some(Self::Avi),
-			ffi::LIBMTP_filetype_t::Mpeg => Some(Self::Mpeg),
-			ffi::LIBMTP_filetype_t::Asf => Some(Self::Asf),
-			ffi::LIBMTP_filetype_t::Qt => Some(Self::Qt),
-			ffi::LIBMTP_filetype_t::UndefVideo => Some(Self::UndefVideo),
-			ffi::LIBMTP_filetype_t::Jpeg => Some(Self::Jpeg),
-			ffi::LIBMTP_filetype_t::Jfif => Some(Self::Jfif),
-			ffi::LIBMTP_filetype_t::Tiff => Some(Self::Tiff),
-			ffi::LIBMTP_filetype_t::Bmp => Some(Self::Bmp),
-			ffi::LIBMTP_filetype_t::Gif => Some(Self::Gif),
-			ffi::LIBMTP_filetype_t::Pict => Some(Self::Pict),
-			ffi::LIBMTP_filetype_t::Png => Some(Self::Png),
-			ffi::LIBMTP_filetype_t::VCalendar1 => Some(Self::VCalendar1),
-			ffi::LIBMTP_filetype_t::VCalendar2 => Some(Self::VCalendar2),
-			ffi::LIBMTP_filetype_t::VCard2 => Some(Self::VCard2),
-			ffi::LIBMTP_filetype_t::VCard3 => Some(Self::VCard3),
-			ffi::LIBMTP_filetype_t::WindowsImageFormat => Some(Self::WindowsImageFormat),
-			ffi::LIBMTP_filetype_t::WinExec => Some(Self::WinExec),
-			ffi::LIBMTP_filetype_t::Text => Some(Self::Text),
-			ffi::LIBMTP_filetype_t::Html => Some(Self::Html),
-			ffi::LIBMTP_filetype_t::Firmware => Some(Self::Firmware),
-			ffi::LIBMTP_filetype_t::Aac => Some(Self::Aac),
-			ffi::LIBMTP_filetype_t::MediaCard => Some(Self::MediaCard),
-			ffi::LIBMTP_filetype_t::Flac => Some(Self::Flac),
-			ffi::LIBMTP_filetype_t::Mp2 => Some(Self::Mp2),
-			ffi::LIBMTP_filetype_t::M4a => Some(Self::M4a),
-			ffi::LIBMTP_filetype_t::Doc => Some(Self::Doc),
-			ffi::LIBMTP_filetype_t::Xml => Some(Self::Xml),
-			ffi::LIBMTP_filetype_t::Xls => Some(Self::Xls),
-			ffi::LIBMTP_filetype_t::Ppt => Some(Self::Ppt),
-			ffi::LIBMTP_filetype_t::Mht => Some(Self::Mht),
-			ffi::LIBMTP_filetype_t::Jp2 => Some(Self::Jp2),
-			ffi::LIBMTP_filetype_t::Jpx => Some(Self::Jpx),
-			ffi::LIBMTP_filetype_t::Unknown => Some(Self::Other),
-			_ => None,
-		}
-	}
-}
-
-/// A responsibility for the data cleanup.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub(crate) enum Ownership {
-	/// Instance owns the data and is responsible for its cleanup.
-	Owns,
-	/// Instance borrows the data and is not responsible for its cleanup.
-	Borrows,
 }
