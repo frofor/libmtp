@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4
+
+Updated storage API:
+- Added `format` method for erasing all data and formatting the storage.
+
+Updated object API:
+- Added `move_to`, `copy_to` and `delete` methods.
+
 ## 0.3.3
 
 Updated object API:

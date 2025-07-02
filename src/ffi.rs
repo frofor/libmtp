@@ -718,11 +718,11 @@ unsafe extern "C" {
 	) -> c_int;
 	pub(crate) fn LIBMTP_Get_File_To_Handler(
 		device: *mut LIBMTP_mtpdevice_t,
-		a: u32,
-		mtpdataputfn: MTPDataPutFunc,
-		b: *mut c_void,
-		progressn: LIBMTP_progressfunc_t,
-		c: *const c_void,
+		id: u32,
+		put_func: MTPDataPutFunc,
+		r#priv: *mut c_void,
+		callback: LIBMTP_progressfunc_t,
+		data: *const c_void,
 	) -> c_int;
 	pub(crate) fn LIBMTP_Send_File_From_File(
 		device: *mut LIBMTP_mtpdevice_t,

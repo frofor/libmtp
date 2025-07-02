@@ -2,6 +2,7 @@
 
 use crate::Device;
 use crate::Object;
+use crate::Result;
 use crate::ffi;
 use crate::obj;
 use crate::obj::Ownership;
@@ -18,12 +19,33 @@ pub struct Storage<'a> {
 	owner: &'a Device,
 	/// The underlying struture of the storage.
 	inner: ffi::LIBMTP_devicestorage_t,
+	/// The pointer to the underlying struture of the storage.
+	inner_ptr: *mut ffi::LIBMTP_devicestorage_t,
 }
 
 impl<'a> Storage<'a> {
 	/// Constructs a new storage.
-	pub(crate) fn new(owner: &'a Device, inner: ffi::LIBMTP_devicestorage_t) -> Self {
-		Self { owner, inner }
+	pub(crate) fn new(owner: &'a Device, ptr: *mut ffi::LIBMTP_devicestorage_t) -> Self {
+		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr }
+	}
+
+	/// Erases all data on the storage and formats it.
+	///
+	/// <div class="warning">
+	/// This function will permanently erase all data from the storage!
+	/// </div>
+	///
+	/// # Errors
+	///
+	/// Returns an error if the device doesn't support storage formatting or if the operation
+	/// has failed.
+	pub fn format(&self) -> Result<()> {
+		let dev = self.owner();
+		let res = unsafe { ffi::LIBMTP_Format_Storage(dev.inner_ptr(), self.inner_ptr) };
+		if res != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
 	}
 
 	/// Retrieves the ID of the storage.
@@ -41,7 +63,6 @@ impl<'a> Storage<'a> {
 		if ptr.is_null() {
 			return None;
 		}
-
 		Some(unsafe { CStr::from_ptr(ptr).to_str().expect("Storage name should be a valid UTF-8") })
 	}
 
@@ -108,9 +129,8 @@ impl<'a> Iterator for Iter<'a> {
 			return None;
 		}
 
-		let inner = unsafe { *self.ptr };
-		let storage = Storage::new(self.dev, inner);
-		self.ptr = inner.next;
+		let storage = Storage::new(self.dev, self.ptr);
+		self.ptr = unsafe { *self.ptr }.next;
 		Some(storage)
 	}
 }

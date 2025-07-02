@@ -50,6 +50,42 @@ impl<'a> Object<'a> {
 		}
 	}
 
+	/// Moves the object to the other folder.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn move_to(&self, parent: Folder) -> Result<()> {
+		match self {
+			Self::Folder(f) => f.move_to(parent),
+			Self::File(f) => f.move_to(parent),
+		}
+	}
+
+	/// Copies the object to the other folder.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn copy_to(&self, parent: Folder) -> Result<()> {
+		match self {
+			Self::Folder(f) => f.copy_to(parent),
+			Self::File(f) => f.copy_to(parent),
+		}
+	}
+
+	/// Deletes the object from the storage.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn delete(&self) -> Result<()> {
+		match self {
+			Self::Folder(f) => f.delete(),
+			Self::File(f) => f.delete(),
+		}
+	}
+
 	/// Retrieves the ID of the object.
 	pub fn id(&self) -> u32 {
 		match self {
@@ -99,7 +135,7 @@ impl<'a> Folder<'a> {
 	/// # Panics
 	///
 	/// Panics if the name of the folder contains a nul byte.
-	pub fn rename<'b>(&self, name: &'b str) -> Result<()> {
+	pub fn rename(&self, name: &str) -> Result<()> {
 		let name = CString::new(name).expect("Folder name should not contain a nul byte");
 		let name_ptr = name.as_ptr() as *mut c_char;
 		let dev = self.owner().owner();
@@ -111,8 +147,56 @@ impl<'a> Folder<'a> {
 		Ok(())
 	}
 
-	/// Creates a new child folder inside the folder.
-	/// Returns the ID of the created folder.
+	/// Moves the folder to the other folder.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn move_to(&self, parent: Folder) -> Result<()> {
+		let storage = self.owner();
+		let dev = storage.owner();
+		let dev_ptr = dev.inner_ptr();
+
+		let res = unsafe { ffi::LIBMTP_Move_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
+		if res != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
+	/// Copies the folder to the other folder.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn copy_to(&self, parent: Folder) -> Result<()> {
+		let storage = self.owner();
+		let dev = storage.owner();
+		let dev_ptr = dev.inner_ptr();
+
+		let res = unsafe { ffi::LIBMTP_Copy_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
+		if res != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
+	/// Deletes the folder from the storage.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn delete(&self) -> Result<()> {
+		let dev = self.owner().owner();
+
+		let res = unsafe { ffi::LIBMTP_Delete_Object(dev.inner_ptr(), self.id()) };
+		if res != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
+	/// Creates a new folder inside the folder. Returns the ID of the created folder.
 	///
 	/// # Errors
 	///
@@ -229,6 +313,55 @@ impl<'a> File<'a> {
 		let dev = self.owner().owner();
 
 		let res = unsafe { ffi::LIBMTP_Set_File_Name(dev.inner_ptr(), self.inner_ptr, name_ptr) };
+		if res != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
+	/// Moves the file to the other folder.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn move_to(&self, parent: Folder) -> Result<()> {
+		let storage = self.owner();
+		let dev = storage.owner();
+		let dev_ptr = dev.inner_ptr();
+
+		let res = unsafe { ffi::LIBMTP_Move_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
+		if res != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
+	/// Copies the file to the other folder.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn copy_to(&self, parent: Folder) -> Result<()> {
+		let storage = self.owner();
+		let dev = storage.owner();
+		let dev_ptr = dev.inner_ptr();
+
+		let res = unsafe { ffi::LIBMTP_Copy_Object(dev_ptr, self.id(), storage.id(), parent.id()) };
+		if res != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
+	/// Deletes the file from the storage.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	pub fn delete(&self) -> Result<()> {
+		let dev = self.owner().owner();
+
+		let res = unsafe { ffi::LIBMTP_Delete_Object(dev.inner_ptr(), self.id()) };
 		if res != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
