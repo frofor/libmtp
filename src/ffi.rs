@@ -10,7 +10,9 @@ use std::ffi::c_char;
 use std::ffi::c_int;
 use std::ffi::c_uchar;
 use std::ffi::c_uint;
+use std::ffi::c_ulong;
 use std::ffi::c_void;
+use std::mem::ManuallyDrop;
 
 pub(crate) type LIBMTP_event_t = LIBMTP_event_enum;
 pub(crate) type LIBMTP_device_entry_t = LIBMTP_device_entry_struct;
@@ -26,28 +28,25 @@ pub(crate) type LIBMTP_album_t = LIBMTP_album_struct;
 pub(crate) type LIBMTP_folder_t = LIBMTP_folder_struct;
 pub(crate) type LIBMTP_filesampledata_t = LIBMTP_filesampledata_struct;
 pub(crate) type LIBMTP_devicestorage_t = LIBMTP_devicestorage_struct;
-pub(crate) type LIBMTP_progressfunc_t =
-	Option<unsafe extern "C" fn(sent: u64, total: u64, data: *const c_void)>;
-pub(crate) type MTPDataGetFunc = Option<
-	unsafe extern "C" fn(
-		params: *mut c_void,
-		r#priv: *mut c_void,
-		wantlen: u32,
-		data: *mut c_uchar,
-		gotlen: *mut u32,
-	) -> u16,
->;
-pub(crate) type MTPDataPutFunc = Option<
-	unsafe extern "C" fn(
-		params: *mut c_void,
-		r#priv: *mut c_void,
-		sendlen: u32,
-		data: *mut c_uchar,
-		putlen: *mut u32,
-	) -> u16,
->;
+pub(crate) type LIBMTP_progressfunc_t = Option<unsafe extern "C" fn(u64, u64, *const c_void)>;
+pub(crate) type MTPDataGetFunc =
+	Option<unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *mut c_uchar, *mut u32) -> u16>;
+pub(crate) type MTPDataPutFunc =
+	Option<unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *mut c_uchar, *mut u32) -> u16>;
 pub(crate) type LIBMTP_event_cb_fn =
-	Option<unsafe extern "C" fn(a: c_int, b: LIBMTP_event_t, c: u32, d: *mut c_void)>;
+	Option<unsafe extern "C" fn(c_int, LIBMTP_event_t, u32, *mut c_void)>;
+pub(crate) type PTPErrorFunc = fn(*mut c_void, *const c_char, *mut c_void);
+pub(crate) type PTPDebugFunc = fn(*mut c_void, *const c_char, *mut c_void);
+pub(crate) type PTPDataGetFunc =
+	fn(*mut PTPParams, *mut c_void, c_ulong, *mut c_uchar, *mut c_ulong) -> u16;
+pub(crate) type PTPDataPutFunc = fn(*mut PTPParams, *mut c_void, c_ulong, *mut c_uchar) -> u16;
+pub(crate) type PTPIOSendReq = fn(*mut PTPParams, *mut PTPContainer, c_int) -> u16;
+pub(crate) type PTPIOSendData =
+	fn(*mut PTPParams, *mut PTPContainer, u64, *mut PTPDataHandler) -> u16;
+pub(crate) type PTPIOGetResp = fn(*mut PTPParams, *mut PTPContainer) -> u16;
+pub(crate) type PTPIOGetData = fn(*mut PTPParams, *mut PTPContainer, *mut PTPDataHandler) -> u16;
+pub(crate) type PTPIOCancelReq = fn(*mut PTPParams, u32) -> u16;
+pub(crate) type PTPIODevStatReq = fn(*mut PTPParams) -> u16;
 
 pub(crate) const LIBMTP_STORAGE_SORTBY_NOTSORTED: c_int = 0;
 pub(crate) const LIBMTP_STORAGE_SORTBY_FREESPACE: c_int = 1;
@@ -55,7 +54,7 @@ pub(crate) const LIBMTP_STORAGE_SORTBY_MAXSPACE: c_int = 2;
 pub(crate) const LIBMTP_FILES_AND_FOLDERS_ROOT: u32 = 4294967295;
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum LIBMTP_event_enum {
 	#[default]
 	None,
@@ -67,7 +66,7 @@ pub(crate) enum LIBMTP_event_enum {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum LIBMTP_filetype_t {
 	Folder,
 	Wav,
@@ -118,7 +117,7 @@ pub(crate) enum LIBMTP_filetype_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum LIBMTP_property_t {
 	StorageId,
 	ObjectFormat,
@@ -292,7 +291,7 @@ pub(crate) enum LIBMTP_property_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum LIBMTP_datatype_t {
 	Int8,
 	Uint8,
@@ -305,7 +304,7 @@ pub(crate) enum LIBMTP_datatype_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum LIBMTP_devicecap_t {
 	GetPartialObject,
 	SendPartialObject,
@@ -315,7 +314,7 @@ pub(crate) enum LIBMTP_devicecap_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum LIBMTP_error_number_t {
 	#[default]
 	None,
@@ -330,7 +329,7 @@ pub(crate) enum LIBMTP_error_number_t {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_device_entry_struct {
 	pub(crate) vendor: *mut c_char,
 	pub(crate) vendor_id: u16,
@@ -340,7 +339,7 @@ pub(crate) struct LIBMTP_device_entry_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_raw_device_struct {
 	pub(crate) device_entry: LIBMTP_device_entry_t,
 	pub(crate) bus_location: u32,
@@ -348,7 +347,7 @@ pub(crate) struct LIBMTP_raw_device_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_error_struct {
 	pub(crate) errornumber: LIBMTP_error_number_t,
 	pub(crate) error_text: *mut c_char,
@@ -356,7 +355,7 @@ pub(crate) struct LIBMTP_error_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_allowed_values_struct {
 	pub(crate) u8max: u8,
 	pub(crate) u8min: u8,
@@ -396,7 +395,7 @@ pub(crate) struct LIBMTP_allowed_values_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_device_extension_struct {
 	pub(crate) name: *mut c_char,
 	pub(crate) major: c_int,
@@ -405,7 +404,7 @@ pub(crate) struct LIBMTP_device_extension_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_mtpdevice_struct {
 	pub(crate) object_bitsize: u8,
 	pub(crate) params: *mut c_void,
@@ -428,7 +427,7 @@ pub(crate) struct LIBMTP_mtpdevice_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_file_struct {
 	pub(crate) item_id: u32,
 	pub(crate) parent_id: u32,
@@ -441,7 +440,7 @@ pub(crate) struct LIBMTP_file_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_track_struct {
 	pub(crate) item_id: u32,
 	pub(crate) parent_id: u32,
@@ -469,7 +468,7 @@ pub(crate) struct LIBMTP_track_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_playlist_struct {
 	pub(crate) playlist_id: u32,
 	pub(crate) parent_id: u32,
@@ -481,7 +480,7 @@ pub(crate) struct LIBMTP_playlist_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_album_struct {
 	pub(crate) album_id: u32,
 	pub(crate) parent_id: u32,
@@ -496,7 +495,7 @@ pub(crate) struct LIBMTP_album_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_folder_struct {
 	pub(crate) folder_id: u32,
 	pub(crate) parent_id: u32,
@@ -507,7 +506,7 @@ pub(crate) struct LIBMTP_folder_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_filesampledata_struct {
 	pub(crate) width: u32,
 	pub(crate) height: u32,
@@ -518,7 +517,7 @@ pub(crate) struct LIBMTP_filesampledata_struct {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Hash, Debug)]
+#[derive(Clone, Copy, Hash, Debug)]
 pub(crate) struct LIBMTP_devicestorage_struct {
 	pub(crate) id: u32,
 	pub(crate) StorageType: u16,
@@ -531,6 +530,330 @@ pub(crate) struct LIBMTP_devicestorage_struct {
 	pub(crate) VolumeIdentifier: *mut c_char,
 	pub(crate) next: *mut LIBMTP_devicestorage_t,
 	pub(crate) prev: *mut LIBMTP_devicestorage_t,
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub(crate) struct PTPParams {
+	pub(crate) device_flags: u32,
+	pub(crate) byteorder: u8,
+	pub(crate) maxpacketsize: u16,
+	pub(crate) sendreq_func: PTPIOSendReq,
+	pub(crate) senddata_func: PTPIOSendData,
+	pub(crate) getresp_func: PTPIOGetResp,
+	pub(crate) getdata_func: PTPIOGetData,
+	pub(crate) event_check: PTPIOGetResp,
+	pub(crate) event_check_queue: PTPIOGetResp,
+	pub(crate) event_wait: PTPIOGetResp,
+	pub(crate) cancelreq_func: PTPIOCancelReq,
+	pub(crate) devstatreq_func: PTPIODevStatReq,
+	pub(crate) error_func: PTPErrorFunc,
+	pub(crate) debug_func: PTPDebugFunc,
+	pub(crate) data: *mut c_void,
+	pub(crate) transaction_id: u32,
+	pub(crate) session_id: u32,
+	pub(crate) opencapture_transid: u32,
+	pub(crate) split_header_data: c_int,
+	pub(crate) ocs64: c_int,
+	pub(crate) nrofobjectformats: c_int,
+	pub(crate) object_formats: *mut MTPObjectFormat,
+	pub(crate) objects: *mut PTPObject,
+	pub(crate) nrofobjects: c_uint,
+	pub(crate) deviceinfo: PTPDeviceInfo,
+	pub(crate) events: *mut PTPContainer,
+	pub(crate) nrofevents: c_uint,
+	pub(crate) capcnt: c_uint,
+	pub(crate) inlineview: c_int,
+	pub(crate) cachetime: c_int,
+	pub(crate) storageids: PTPStorageIDs,
+	pub(crate) storagechanged: c_int,
+	pub(crate) deviceproperties: *mut PTPDeviceProperty,
+	pub(crate) nrofdeviceproperties: c_uint,
+	pub(crate) canon_proprs: *mut PTPCanon_Property,
+	pub(crate) nrofcanon_props: c_uint,
+	pub(crate) canon_viewfinder_on: c_int,
+	pub(crate) canon_event_mode: c_int,
+	pub(crate) backlogentries: *mut PTPCanon_changes_entry,
+	pub(crate) nrofbacklogentries: c_uint,
+	pub(crate) eos_captureenabled: c_int,
+	pub(crate) eos_camerastatus: c_int,
+	pub(crate) controlmode: c_int,
+	pub(crate) event90c7works: c_int,
+	pub(crate) deletesdramfails: c_int,
+	pub(crate) starttime: timeval,
+	pub(crate) wifi_profiles_version: u8,
+	pub(crate) wifi_profiles_number: u8,
+	pub(crate) wifi_profiles: *mut PTPNIKONWifiProfile,
+	pub(crate) cmdfd: c_int,
+	pub(crate) evtfd: c_int,
+	pub(crate) jpgfd: c_int,
+	pub(crate) cameraguid: [u8; 16],
+	pub(crate) eventpipeid: u32,
+	pub(crate) cameraname: *mut c_char,
+	pub(crate) outer_deviceinfo: PTPDeviceInfo,
+	pub(crate) olympus_cmd: *mut c_char,
+	pub(crate) olympus_reply: *mut c_char,
+	pub(crate) outer_params: Box<PTPParams>,
+	pub(crate) response_packet: *mut u8,
+	pub(crate) response_packet_size: u16,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPDeviceInfo {
+	pub(crate) StandardVersion: u16,
+	pub(crate) VendorExtensionID: u32,
+	pub(crate) VendorExtensionDesc: *mut c_char,
+	pub(crate) FunctionalMode: u16,
+	pub(crate) OperationsSupported_len: u32,
+	pub(crate) OperationsSupported: *mut u16,
+	pub(crate) EventsSupported_len: u32,
+	pub(crate) EventsSupported: *mut u16,
+	pub(crate) DevicePropertiesSupported_len: u32,
+	pub(crate) DevicePropertiesSupported: *mut u16,
+	pub(crate) CaptureFormats_len: u32,
+	pub(crate) CaptureFormats: *mut u16,
+	pub(crate) ImageFormats_len: u32,
+	pub(crate) ImageFormats: *mut u16,
+	pub(crate) Manufacturer: *mut c_char,
+	pub(crate) Model: *mut c_char,
+	pub(crate) DeviceVersion: *mut c_char,
+	pub(crate) SerialNumber: *mut c_char,
+}
+
+#[repr(C)]
+pub(crate) struct PTPDeviceProperty {
+	pub(crate) timestamp: time_t,
+	pub(crate) desc: PTPDevicePropDesc,
+	pub(crate) value: PTPPropertyValue,
+}
+
+#[repr(C)]
+pub(crate) struct PTPDevicePropDesc {
+	pub(crate) DevicePropertyCode: u16,
+	pub(crate) DataType: u16,
+	pub(crate) GetSet: u8,
+	pub(crate) FactoryDefaultValue: PTPPropertyValue,
+	pub(crate) CurrentValue: PTPPropertyValue,
+	pub(crate) FormFlag: u8,
+	pub(crate) FORM: PTPDevicePropDescForm,
+}
+
+#[repr(C)]
+pub(crate) union PTPDevicePropDescForm {
+	pub(crate) Enum: PTPPropDescEnumForm,
+	pub(crate) Range: ManuallyDrop<PTPPropDescRangeForm>,
+}
+
+#[repr(C)]
+pub(crate) struct PTPCanon_Property {
+	pub(crate) size: u32,
+	pub(crate) proptype: u32,
+	pub(crate) data: *mut c_uchar,
+	pub(crate) dpd: PTPDevicePropDesc,
+}
+
+#[repr(C)]
+pub(crate) struct PTPCanon_changes_entry {
+	pub(crate) r#type: PTPCanon_changes_types,
+	pub(crate) u: PTPCanon_changes_entryUnion,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub(crate) enum PTPCanon_changes_types {
+	PTP_CANON_EOS_CHANGES_TYPE_UNKNOWN,
+	PTP_CANON_EOS_CHANGES_TYPE_OBJECTINFO,
+	PTP_CANON_EOS_CHANGES_TYPE_OBJECTTRANSFER,
+	PTP_CANON_EOS_CHANGES_TYPE_PROPERTY,
+	PTP_CANON_EOS_CHANGES_TYPE_CAMERASTATUS,
+	PTP_CANON_EOS_CHANGES_TYPE_FOCUSINFO,
+	PTP_CANON_EOS_CHANGES_TYPE_FOCUSMASK,
+	PTP_CANON_EOS_CHANGES_TYPE_OBJECTREMOVED,
+	PTP_CANON_EOS_CHANGES_TYPE_OBJECTINFO_CHANGE,
+	PTP_CANON_EOS_CHANGES_TYPE_OBJECTCONTENT_CHANGE,
+}
+
+#[repr(C)]
+pub(crate) union PTPCanon_changes_entryUnion {
+	pub(crate) object: PTPCanon_New_Object,
+	pub(crate) info: *mut c_char,
+	pub(crate) propid: u16,
+	pub(crate) status: c_int,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPCanon_New_Object {
+	pub(crate) oid: u32,
+	pub(crate) oi: PTPObjectInfo,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPObjectInfo {
+	pub(crate) StorageID: u32,
+	pub(crate) ObjectFormat: u16,
+	pub(crate) ProtectionStatus: u16,
+	pub(crate) ObjectCompressedSize: u64,
+	pub(crate) ThumbFormat: u16,
+	pub(crate) ThumbCompressedSize: u32,
+	pub(crate) ThumbPixWidth: u32,
+	pub(crate) ThumbPixHeight: u32,
+	pub(crate) ImagePixWidth: u32,
+	pub(crate) ImagePixHeight: u32,
+	pub(crate) ImageBitDepth: u32,
+	pub(crate) ParentObject: u32,
+	pub(crate) AssociationType: u16,
+	pub(crate) AssociationDesc: u32,
+	pub(crate) SequenceNumber: u32,
+	pub(crate) Filename: *mut c_char,
+	pub(crate) CaptureDate: time_t,
+	pub(crate) ModificationDate: time_t,
+	pub(crate) Keywords: *mut c_char,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct PTPNIKONWifiProfile {
+	pub(crate) profile_name: [c_char; 17],
+	pub(crate) device_type: u8,
+	pub(crate) icon_type: u8,
+	pub(crate) essid: [c_char; 33],
+	pub(crate) id: u8,
+	pub(crate) valid: u8,
+	pub(crate) display_order: u8,
+	pub(crate) creation_date: [c_char; 16],
+	pub(crate) lastusage_date: [c_char; 16],
+	pub(crate) ip_address: u32,
+	pub(crate) subnet_mask: u8,
+	pub(crate) gateway_address: u32,
+	pub(crate) address_mode: u8,
+	pub(crate) access_mode: u8,
+	pub(crate) wifi_channel: u8,
+	pub(crate) authentification: u8,
+	pub(crate) encryption: u8,
+	pub(crate) key: [u8; 64],
+	pub(crate) key_nr: u8,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPContainer {
+	pub(crate) Code: u16,
+	pub(crate) SessionID: u32,
+	pub(crate) Transaction_ID: u32,
+	pub(crate) Param1: u32,
+	pub(crate) Param2: u32,
+	pub(crate) Param3: u32,
+	pub(crate) Param4: u32,
+	pub(crate) Param5: u32,
+	pub(crate) Nparam: u8,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct MTPObjectFormat {
+	pub(crate) ofc: u16,
+	pub(crate) nrofpds: c_uint,
+	pub(crate) pds: *mut MTPPropertyDesc,
+}
+
+#[repr(C)]
+pub(crate) struct MTPPropertyDesc {
+	pub(crate) opc: u16,
+	pub(crate) opd: PTPObjectPropDesc,
+}
+
+#[repr(C)]
+pub(crate) struct PTPObjectPropDesc {
+	pub(crate) ObjectPropertyCode: u16,
+	pub(crate) DataType: u16,
+	pub(crate) GetSet: u8,
+	pub(crate) FactoryDefaultValue: PTPPropertyValue,
+	pub(crate) GroupCode: u32,
+	pub(crate) FormFlag: u8,
+	pub(crate) FORM: PTPObjectPropDescForm,
+}
+
+#[repr(C)]
+pub(crate) union PTPObjectPropDescForm {
+	pub(crate) Enum: PTPPropDescEnumForm,
+	pub(crate) Range: ManuallyDrop<PTPPropDescRangeForm>,
+	pub(crate) DateTime: PTPPropDescStringForm,
+	pub(crate) FixedLengthArray: PTPPropDescArrayLengthForm,
+	pub(crate) RegularExpression: PTPPropDescStringForm,
+	pub(crate) ByteArray: PTPPropDescArrayLengthForm,
+	pub(crate) LongString: PTPPropDescStringForm,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPPropDescEnumForm {
+	pub(crate) NumberOfValues: u16,
+	pub(crate) SupportedValues: *mut PTPPropertyValue,
+}
+
+#[repr(C)]
+pub(crate) struct PTPPropDescRangeForm {
+	pub(crate) MinimumValue: PTPPropertyValue,
+	pub(crate) MaximumValue: PTPPropertyValue,
+	pub(crate) StepSize: PTPPropertyValue,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPPropDescStringForm {
+	pub(crate) Strict: *mut c_char,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPPropDescArrayLengthForm {
+	pub(crate) NumberOfValues: u16,
+}
+
+#[repr(C)]
+pub(crate) union PTPPropertyValue {
+	pub(crate) str: *mut c_char,
+	pub(crate) u8: u8,
+	pub(crate) i8: i8,
+	pub(crate) u16: u16,
+	pub(crate) i16: i16,
+	pub(crate) u32: u32,
+	pub(crate) i32: i32,
+	pub(crate) u64: u64,
+	pub(crate) i64: i64,
+	pub(crate) a: ManuallyDrop<Box<PTPPropertyValueArray>>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPObject {
+	pub(crate) oid: u32,
+	pub(crate) flags: c_uint,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPStorageIDs {
+	pub(crate) n: u32,
+	pub(crate) Storage: *mut u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPPropertyValueArray {
+	pub(crate) count: u32,
+	pub(crate) v: *mut PTPPropertyValue,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Hash, Debug)]
+pub(crate) struct PTPDataHandler {
+	pub(crate) getfunc: PTPDataGetFunc,
+	pub(crate) putfunc: PTPDataPutFunc,
+	pub(crate) r#priv: *mut c_void,
 }
 
 #[link(name = "mtp")]

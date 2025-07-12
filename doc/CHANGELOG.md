@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.1
+
+Added functions for constructing device from the serial number or the order number.
+Added recursive iterators for storages and folders.
+Added examples to documentation of most methods.
+
+Updated device API:
+- Renamed `discover` to `search_raw_devices`.
+- Added `RawDevice::from_order` for searching the device by the order.
+- Added `Device::from_serial` for searching the device by the serial number.
+- Added `Device::find_storage` for searching the storage of the device by the ID.
+- Added `serial`, `vendor` and `product` methods to `Device`.
+
+Updated storage API:
+- Added `Storage::iter_recursive` for recursive iterating over the objects of the storage.
+
+Updated object API:
+- Added `Folder::iter_recursive` for recursive iterating over the objects of the folder.
+
 ## 0.4.0
 
 Updated object API:

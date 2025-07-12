@@ -12,15 +12,15 @@ To install the latest version of `libmtp` from [crates.io](https://crates.io/cra
 $ cargo add libmtp
 ```
 
-## Get Started
+## Getting started
 
 To get started, create a new program that prints all objects in the root folder of your storage:
 
 ```rust
-use libmtp::dev::discover;
+use libmtp::search_raw_devices;
 
 fn main() -> libmtp::Result<()> {
-	for device in discover()?.filter_map(|r| r.open_uncached()) {
+	for device in search_raw_devices()?.filter_map(|r| r.open_uncached()) {
 		for storage in &device {
 			for object in &storage {
 				println!("{object:?}");

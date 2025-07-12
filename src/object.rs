@@ -4,7 +4,7 @@ use crate::Result;
 use crate::Storage;
 use crate::convert::path_to_cstring;
 use crate::ffi;
-use crate::obj;
+use crate::object;
 use libc::time_t;
 use std::ffi::CStr;
 use std::ffi::CString;
@@ -28,16 +28,20 @@ pub enum Object<'a> {
 
 impl<'a> Object<'a> {
 	/// Constructs a new object.
-	pub(crate) fn from_ffi(
+	///
+	/// # Safety
+	///
+	/// `ptr` should not be null.
+	pub(crate) unsafe fn new_unchecked(
 		storage: &'a Storage,
 		ptr: *mut ffi::LIBMTP_file_t,
 		ownership: Ownership,
 	) -> Self {
 		let inner = unsafe { *ptr };
-		if FileKind::from_ffi(inner.filetype).is_none() {
-			return Self::Folder(Folder::from_ffi(storage, ptr, ownership));
+		if FileKind::new(inner.filetype).is_none() {
+			return Self::Folder(unsafe { Folder::new_unchecked(storage, ptr, ownership) });
 		}
-		Self::File(File::from_ffi(storage, ptr))
+		Self::File(unsafe { File::new_unchecked(storage, ptr) })
 	}
 
 	/// Changes the name of the object.
@@ -127,7 +131,7 @@ pub struct Folder<'a> {
 
 impl<'a> Folder<'a> {
 	/// Constructs a new folder.
-	pub(crate) fn from_ffi(
+	pub(crate) unsafe fn new_unchecked(
 		owner: &'a Storage,
 		ptr: *mut ffi::LIBMTP_file_t,
 		ownership: Ownership,
@@ -290,8 +294,15 @@ impl<'a> Folder<'a> {
 	}
 
 	/// Retrieves an iterator over the objects of the folder.
-	pub fn iter(&self) -> obj::Iter {
-		obj::Iter::new(self.owner, self.inner_ptr, Ownership::Borrows)
+	pub fn iter(&self) -> ObjectIter {
+		unsafe { ObjectIter::new_unchecked(self.owner, self.inner_ptr, Ownership::Borrows) }
+	}
+
+	/// Retrieves a recursive iterator over the objects of the folder.
+	pub fn iter_recursive(&self) -> ObjectRecursiveIter {
+		unsafe {
+			ObjectRecursiveIter::new_unchecked(self.owner, self.inner_ptr, Ownership::Borrows)
+		}
 	}
 
 	/// Retrieves the ID of the folder.
@@ -335,7 +346,7 @@ impl<'a> Debug for Folder<'a> {
 
 impl<'a> IntoIterator for &'a Folder<'a> {
 	type Item = Object<'a>;
-	type IntoIter = obj::Iter<'a>;
+	type IntoIter = object::ObjectIter<'a>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.iter()
@@ -358,13 +369,16 @@ pub struct File<'a> {
 	owner: &'a Storage<'a>,
 	/// The underlying structure of the file.
 	inner: ffi::LIBMTP_file_t,
-	/// The pointer to the underlying structure of the file.
 	inner_ptr: *mut ffi::LIBMTP_file_t,
 }
 
 impl<'a> File<'a> {
 	/// Constructs a new file.
-	pub(crate) fn from_ffi(owner: &'a Storage, ptr: *mut ffi::LIBMTP_file_t) -> Self {
+	///
+	/// # Safety
+	///
+	/// `ptr` should not be null.
+	pub(crate) unsafe fn new_unchecked(owner: &'a Storage, ptr: *mut ffi::LIBMTP_file_t) -> Self {
 		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr }
 	}
 
@@ -485,7 +499,7 @@ impl<'a> File<'a> {
 
 	/// Retrieves the kind of the file.
 	pub fn kind(&self) -> FileKind {
-		FileKind::from_ffi(self.inner.filetype)
+		FileKind::new(self.inner.filetype)
 			.expect("File type should not be a folder, an album or a playlist")
 	}
 
@@ -612,7 +626,7 @@ pub enum FileKind {
 
 impl FileKind {
 	/// Constructs a new file kind.
-	pub(crate) fn from_ffi(filetype: ffi::LIBMTP_filetype_t) -> Option<Self> {
+	pub(crate) fn new(filetype: ffi::LIBMTP_filetype_t) -> Option<Self> {
 		match filetype {
 			ffi::LIBMTP_filetype_t::Wav => Some(Self::Wav),
 			ffi::LIBMTP_filetype_t::Mp3 => Some(Self::Mp3),
@@ -711,7 +725,7 @@ impl FileKind {
 
 /// An iterator over the objects of the folder.
 #[derive(Clone, Copy)]
-pub struct Iter<'a> {
+pub struct ObjectIter<'a> {
 	/// The storage to which the object belongs.
 	storage: &'a Storage<'a>,
 	/// The pointer to the underlying structure of the object.
@@ -720,9 +734,13 @@ pub struct Iter<'a> {
 	ownership: Ownership,
 }
 
-impl<'a> Iter<'a> {
+impl<'a> ObjectIter<'a> {
 	/// Constructs a new objects iterator.
-	pub(crate) fn new(
+	///
+	/// # Safety
+	///
+	/// `ptr` should not be null.
+	pub(crate) unsafe fn new_unchecked(
 		storage: &'a Storage,
 		ptr: *mut ffi::LIBMTP_file_t,
 		ownership: Ownership,
@@ -731,7 +749,7 @@ impl<'a> Iter<'a> {
 	}
 }
 
-impl<'a> Iterator for Iter<'a> {
+impl<'a> Iterator for ObjectIter<'a> {
 	type Item = Object<'a>;
 
 	fn next(&mut self) -> Option<Self::Item> {
@@ -739,7 +757,59 @@ impl<'a> Iterator for Iter<'a> {
 			return None;
 		}
 
-		let obj = Object::from_ffi(self.storage, self.ptr, self.ownership);
+		let obj = unsafe { Object::new_unchecked(self.storage, self.ptr, self.ownership) };
+		self.ptr = unsafe { *self.ptr }.next;
+		Some(obj)
+	}
+}
+
+/// A recursive iterator over the objects of the folder.
+#[derive(Clone)]
+pub struct ObjectRecursiveIter<'a> {
+	/// The storage to which the object belongs.
+	storage: &'a Storage<'a>,
+	/// The stack that holds the IDs of unvisited folders.
+	stack: Vec<u32>,
+	/// The pointer to the underlying structure of the object.
+	ptr: *mut ffi::LIBMTP_file_t,
+	/// The responsibility of the object for the pointer cleanup.
+	ownership: Ownership,
+}
+
+impl<'a> ObjectRecursiveIter<'a> {
+	/// Constructs a new recursive objects iterator.
+	///
+	/// # Safety
+	///
+	/// `ptr` should not be null.
+	pub(crate) unsafe fn new_unchecked(
+		storage: &'a Storage,
+		ptr: *mut ffi::LIBMTP_file_t,
+		ownership: Ownership,
+	) -> Self {
+		Self { storage, stack: Vec::new(), ptr, ownership }
+	}
+}
+
+impl<'a> Iterator for ObjectRecursiveIter<'a> {
+	type Item = Object<'a>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		while self.ptr.is_null() {
+			let Some(id) = self.stack.pop() else {
+				return None;
+			};
+
+			let dev_ptr = self.storage.owner().inner_ptr();
+			let storage_id = self.storage.id();
+			self.ptr = unsafe { ffi::LIBMTP_Get_Files_And_Folders(dev_ptr, storage_id, id) };
+		}
+
+		let obj = unsafe { Object::new_unchecked(self.storage, self.ptr, self.ownership) };
+		if let Object::Folder(f) = &obj {
+			self.stack.push(f.id());
+		}
+
 		self.ptr = unsafe { *self.ptr }.next;
 		Some(obj)
 	}

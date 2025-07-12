@@ -1,15 +1,14 @@
+use libmtp::Device;
 use libmtp::Object;
-use libmtp::dev::discover;
 
 fn main() -> libmtp::Result<()> {
-	for device in discover()?.filter_map(|r| r.open_uncached()) {
-		for storage in &device {
-			for object in &storage {
-				if let Object::File(f) = object {
-					let path = format!("/tmp/libmtp-{}", f.name());
-					f.copy_to_host(path)?;
-				}
-			}
+	let device = Device::from_serial("GVEV4I3E0WU1")?.expect("Device should exist");
+	let storage = device.find_storage(65537).expect("Storage should exist");
+	for object in storage.iter_recursive() {
+		if let Object::File(file) = object {
+			let path = format!("/tmp/libmtp-{}", file.name());
+			file.copy_to_host(path)?;
+			break;
 		}
 	}
 	Ok(())

@@ -9,7 +9,7 @@ use std::slice;
 ///
 /// # Safety
 ///
-/// The caller must ensure that `ptr` is a valid pointer to a null-terminated string.
+/// `ptr` should be a valid pointer to a null-terminated string.
 pub(crate) unsafe fn ptr_to_string(ptr: *const c_char) -> String {
 	let mut len = 0;
 	let mut c = unsafe { *ptr.offset(len) };
