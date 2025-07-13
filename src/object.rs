@@ -33,15 +33,41 @@ impl<'a> Object<'a> {
 	///
 	/// `ptr` should not be null.
 	pub(crate) unsafe fn new_unchecked(
-		storage: &'a Storage,
+		owner: &'a Storage,
 		ptr: *mut ffi::LIBMTP_file_t,
 		ownership: Ownership,
 	) -> Self {
 		let inner = unsafe { *ptr };
 		if FileKind::new(inner.filetype).is_none() {
-			return Self::Folder(unsafe { Folder::new_unchecked(storage, ptr, ownership) });
+			return Self::Folder(unsafe { Folder::new_unchecked(owner, ptr, ownership) });
 		}
-		Self::File(unsafe { File::new_unchecked(storage, ptr) })
+		Self::File(unsafe { File::new_unchecked(owner, ptr) })
+	}
+
+	/// Retrieves the ID of the object.
+	pub fn id(&self) -> u32 {
+		match self {
+			Self::Folder(f) => f.id(),
+			Self::File(f) => f.id(),
+		}
+	}
+
+	/// Retrieves the name of the object.
+	pub fn name(&self) -> &str {
+		match self {
+			Self::Folder(f) => f.name(),
+			Self::File(f) => f.name(),
+		}
+	}
+
+	/// Checks if the object is folder.
+	pub fn is_folder(&self) -> bool {
+		matches!(self, Self::Folder(_))
+	}
+
+	/// Checks if the object is file.
+	pub fn is_file(&self) -> bool {
+		matches!(self, Self::File(_))
 	}
 
 	/// Changes the name of the object.
@@ -98,22 +124,6 @@ impl<'a> Object<'a> {
 			Self::File(f) => f.delete(),
 		}
 	}
-
-	/// Retrieves the ID of the object.
-	pub fn id(&self) -> u32 {
-		match self {
-			Self::Folder(f) => f.id(),
-			Self::File(f) => f.id(),
-		}
-	}
-
-	/// Retrieves the name of the object.
-	pub fn name(&self) -> &str {
-		match self {
-			Self::Folder(f) => f.name(),
-			Self::File(f) => f.name(),
-		}
-	}
 }
 
 /// A folder on the storage.
@@ -137,6 +147,26 @@ impl<'a> Folder<'a> {
 		ownership: Ownership,
 	) -> Self {
 		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr, ownership }
+	}
+
+	/// Retrieves the ID of the folder.
+	pub fn id(&self) -> u32 {
+		self.inner.item_id
+	}
+
+	/// Retrieves the name of the folder.
+	///
+	/// # Panics
+	///
+	/// Panics if the name of the folder is not a valid UTF-8.
+	pub fn name(&self) -> &str {
+		let name = self.inner.filename;
+		unsafe { CStr::from_ptr(name).to_str().expect("Folder name should be a valid UTF-8") }
+	}
+
+	/// Retrieves the storage to which the folder belongs.
+	pub(crate) fn owner(&self) -> &Storage {
+		self.owner
 	}
 
 	/// Changes the name of the foler.
@@ -304,26 +334,6 @@ impl<'a> Folder<'a> {
 			ObjectRecursiveIter::new_unchecked(self.owner, self.inner_ptr, Ownership::Borrows)
 		}
 	}
-
-	/// Retrieves the ID of the folder.
-	pub fn id(&self) -> u32 {
-		self.inner.item_id
-	}
-
-	/// Retrieves the name of the folder.
-	///
-	/// # Panics
-	///
-	/// Panics if the name of the folder is not a valid UTF-8.
-	pub fn name(&self) -> &str {
-		let name = self.inner.filename;
-		unsafe { CStr::from_ptr(name).to_str().expect("Folder name should be a valid UTF-8") }
-	}
-
-	/// Retrieves the storage to which the folder belongs.
-	pub(crate) fn owner(&self) -> &Storage {
-		self.owner
-	}
 }
 
 #[doc(hidden)]
@@ -369,6 +379,7 @@ pub struct File<'a> {
 	owner: &'a Storage<'a>,
 	/// The underlying structure of the file.
 	inner: ffi::LIBMTP_file_t,
+	/// The pointer to the underlying structure of the file.
 	inner_ptr: *mut ffi::LIBMTP_file_t,
 }
 
@@ -380,6 +391,37 @@ impl<'a> File<'a> {
 	/// `ptr` should not be null.
 	pub(crate) unsafe fn new_unchecked(owner: &'a Storage, ptr: *mut ffi::LIBMTP_file_t) -> Self {
 		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr }
+	}
+
+	/// Retrieves the ID of the file.
+	pub fn id(&self) -> u32 {
+		self.inner.item_id
+	}
+
+	/// Retrieves the name of the file.
+	///
+	/// # Panics
+	///
+	/// Panics if the name of the file is not a valid UTF-8.
+	pub fn name(&self) -> &str {
+		let name = self.inner.filename;
+		unsafe { CStr::from_ptr(name).to_str().expect("File name should be a valid UTF-8") }
+	}
+
+	/// Retrieves the kind of the file.
+	pub fn kind(&self) -> FileKind {
+		FileKind::new(self.inner.filetype)
+			.expect("File type should not be a folder, an album or a playlist")
+	}
+
+	/// Retrieves the total size in bytes of the file.
+	pub fn size(&self) -> u64 {
+		self.inner.filesize
+	}
+
+	/// Retrieves the storage to which the file belongs.
+	pub(crate) fn owner(&self) -> &Storage {
+		self.owner
 	}
 
 	/// Changes the name of the file.
@@ -480,37 +522,6 @@ impl<'a> File<'a> {
 			return Err(dev.pop_err().unwrap_or_default());
 		}
 		Ok(())
-	}
-
-	/// Retrieves the ID of the file.
-	pub fn id(&self) -> u32 {
-		self.inner.item_id
-	}
-
-	/// Retrieves the name of the file.
-	///
-	/// # Panics
-	///
-	/// Panics if the name of the file is not a valid UTF-8.
-	pub fn name(&self) -> &str {
-		let name = self.inner.filename;
-		unsafe { CStr::from_ptr(name).to_str().expect("File name should be a valid UTF-8") }
-	}
-
-	/// Retrieves the kind of the file.
-	pub fn kind(&self) -> FileKind {
-		FileKind::new(self.inner.filetype)
-			.expect("File type should not be a folder, an album or a playlist")
-	}
-
-	/// Retrieves the total size in bytes of the file.
-	pub fn size(&self) -> u64 {
-		self.inner.filesize
-	}
-
-	/// Retrieves the storage to which the file belongs.
-	pub(crate) fn owner(&self) -> &Storage {
-		self.owner
 	}
 }
 
@@ -806,8 +817,8 @@ impl<'a> Iterator for ObjectRecursiveIter<'a> {
 		}
 
 		let obj = unsafe { Object::new_unchecked(self.storage, self.ptr, self.ownership) };
-		if let Object::Folder(f) = &obj {
-			self.stack.push(f.id());
+		if obj.is_folder() {
+			self.stack.push(obj.id());
 		}
 
 		self.ptr = unsafe { *self.ptr }.next;

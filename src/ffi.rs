@@ -1,6 +1,7 @@
 //! This module provides external FFI bindings to libmtp library.
 
 #![allow(non_camel_case_types)]
+#![allow(non_upper_case_globals)]
 #![allow(non_snake_case)]
 #![allow(unused)]
 
@@ -52,11 +53,22 @@ pub(crate) const LIBMTP_STORAGE_SORTBY_NOTSORTED: c_int = 0;
 pub(crate) const LIBMTP_STORAGE_SORTBY_FREESPACE: c_int = 1;
 pub(crate) const LIBMTP_STORAGE_SORTBY_MAXSPACE: c_int = 2;
 pub(crate) const LIBMTP_FILES_AND_FOLDERS_ROOT: u32 = 4294967295;
+pub(crate) const PTP_ST_Undefined: u16 = 0;
+pub(crate) const PTP_ST_FixedROM: u16 = 1;
+pub(crate) const PTP_ST_RemovableROM: u16 = 2;
+pub(crate) const PTP_ST_FixedRAM: u16 = 3;
+pub(crate) const PTP_ST_RemovableRAM: u16 = 4;
+pub(crate) const PTP_FST_Undefined: u16 = 0;
+pub(crate) const PTP_FST_GenericFlat: u16 = 1;
+pub(crate) const PTP_FST_GenericHierarchical: u16 = 2;
+pub(crate) const PTP_FST_DCF: u16 = 3;
+pub(crate) const PTP_AC_ReadWrite: u16 = 0;
+pub(crate) const PTP_AC_ReadOnly: u16 = 1;
+pub(crate) const PTP_AC_ReadOnly_with_Object_Deletion: u16 = 2;
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum LIBMTP_event_enum {
-	#[default]
 	None,
 	StoreAdded,
 	StoreRemoved,
@@ -66,7 +78,7 @@ pub(crate) enum LIBMTP_event_enum {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum LIBMTP_filetype_t {
 	Folder,
 	Wav,
@@ -112,12 +124,11 @@ pub(crate) enum LIBMTP_filetype_t {
 	Jpx,
 	Album,
 	Playlist,
-	#[default]
 	Unknown,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum LIBMTP_property_t {
 	StorageId,
 	ObjectFormat,
@@ -286,7 +297,6 @@ pub(crate) enum LIBMTP_property_t {
 	EncodingQuality,
 	EncodingProfile,
 	BuyFlag,
-	#[default]
 	Unknown,
 }
 
@@ -314,9 +324,8 @@ pub(crate) enum LIBMTP_devicecap_t {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum LIBMTP_error_number_t {
-	#[default]
 	None,
 	General,
 	PtpLayer,

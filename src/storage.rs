@@ -37,25 +37,6 @@ impl<'a> Storage<'a> {
 		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr }
 	}
 
-	/// Erases all data on the storage and formats it.
-	///
-	/// <div class="warning">
-	/// This function will permanently erase all data from the storage!
-	/// </div>
-	///
-	/// # Errors
-	///
-	/// Returns an error if the device doesn't have a support for storage formatting or if the
-	/// operation has failed.
-	pub fn format(&self) -> Result<()> {
-		let dev = self.owner();
-		let n = unsafe { ffi::LIBMTP_Format_Storage(dev.inner_ptr(), self.inner_ptr) };
-		if n != 0 {
-			return Err(dev.pop_err().unwrap_or_default());
-		}
-		Ok(())
-	}
-
 	/// Retrieves the ID of the storage.
 	pub fn id(&self) -> u32 {
 		self.inner.id
@@ -74,6 +55,21 @@ impl<'a> Storage<'a> {
 		Some(unsafe { CStr::from_ptr(ptr).to_str().expect("Storage name should be a valid UTF-8") })
 	}
 
+	/// Retrieves the kind of the storage.
+	pub fn kind(&self) -> Option<StorageKind> {
+		StorageKind::new(self.inner.StorageType)
+	}
+
+	/// Retrieves the filesystem of the storage.
+	pub fn fs(&self) -> Option<Filesystem> {
+		Filesystem::new(self.inner.FilesystemType)
+	}
+
+	/// Retrieves the access capability over the storage.
+	pub fn access(&self) -> Option<StorageAccess> {
+		StorageAccess::new(self.inner.AccessCapability)
+	}
+
 	/// Retrieves the total space in bytes of the storage.
 	pub fn total_space(&self) -> u64 {
 		self.inner.MaxCapacity
@@ -82,6 +78,30 @@ impl<'a> Storage<'a> {
 	/// Retrieves the free space in bytes of the storage.
 	pub fn free_space(&self) -> u64 {
 		self.inner.FreeSpaceInBytes
+	}
+
+	/// Retrieves the device to which the storage belongs.
+	pub(crate) fn owner(&self) -> &Device {
+		self.owner
+	}
+
+	/// Erases all data on the storage and formats it.
+	///
+	/// <div class="warning">
+	/// This function will permanently erase all data from the storage!
+	/// </div>
+	///
+	/// # Errors
+	///
+	/// Returns an error if the device doesn't have a support for storage formatting or if the
+	/// operation has failed.
+	pub fn format(&self) -> Result<()> {
+		let dev = self.owner();
+		let n = unsafe { ffi::LIBMTP_Format_Storage(dev.inner_ptr(), self.inner_ptr) };
+		if n != 0 {
+			return Err(dev.pop_err().unwrap_or_default());
+		}
+		Ok(())
 	}
 
 	/// Retrieves an iterator over the objects in the root of the storage.
@@ -107,11 +127,6 @@ impl<'a> Storage<'a> {
 		};
 		unsafe { ObjectRecursiveIter::new_unchecked(self, ptr, Ownership::Owns) }
 	}
-
-	/// Retrieves the device to which the storage belongs.
-	pub(crate) fn owner(&self) -> &Device {
-		self.owner
-	}
 }
 
 impl<'a> IntoIterator for &'a Storage<'a> {
@@ -134,9 +149,92 @@ impl<'a> Debug for Storage<'a> {
 		f.debug_struct("Storage")
 			.field("id", &self.id())
 			.field("name", &self.name())
+			.field("kind", &self.kind())
+			.field("fs", &self.fs())
+			.field("access", &self.access())
 			.field("total_space", &self.total_space())
 			.field("free_space", &self.free_space())
 			.finish()
+	}
+}
+
+/// A kind of the storage.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum StorageKind {
+	/// Read-only memory storage (ROM) that cannot be detached from device.
+	FixedRom,
+	/// Read-only memory storage (ROM) that can be detached from device.
+	RemovableRom,
+	/// Random-access memory (RAM) that cannot be detached from device.
+	FixedRam,
+	/// Random-access memory (RAM) that can be detached from device.
+	RemovableRam,
+	#[default]
+	/// Other storage kind.
+	Other,
+}
+
+impl StorageKind {
+	/// Constructs a new storage kind.
+	pub(crate) fn new(n: u16) -> Option<Self> {
+		match n {
+			ffi::PTP_ST_Undefined => Some(Self::Other),
+			ffi::PTP_ST_FixedROM => Some(Self::FixedRom),
+			ffi::PTP_ST_RemovableROM => Some(Self::RemovableRom),
+			ffi::PTP_ST_FixedRAM => Some(Self::FixedRam),
+			ffi::PTP_ST_RemovableRAM => Some(Self::RemovableRam),
+			_ => None,
+		}
+	}
+}
+
+/// A filesystem of the storage.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum Filesystem {
+	/// Filesystem with no hierarchical structure.
+	Flat,
+	/// Filesystem that organizes files in a tree structure.
+	Tree,
+	/// Design rule for Camera File system (DCF).
+	Dcf,
+	/// Other filesystem.
+	#[default]
+	Other,
+}
+
+impl Filesystem {
+	/// Constructs a new filesystem.
+	pub(crate) fn new(n: u16) -> Option<Self> {
+		match n {
+			ffi::PTP_FST_Undefined => Some(Self::Other),
+			ffi::PTP_FST_GenericFlat => Some(Self::Flat),
+			ffi::PTP_FST_GenericHierarchical => Some(Self::Tree),
+			ffi::PTP_FST_DCF => Some(Self::Dcf),
+			_ => None,
+		}
+	}
+}
+
+/// An access capability over the storage.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum StorageAccess {
+	/// Allows both reading and writing operations on objects.
+	ReadWrite,
+	/// Allows only reading and deleting operations on objects.
+	ReadDelete,
+	/// Allows only reading objects.
+	Read,
+}
+
+impl StorageAccess {
+	/// Constructs a new storage access.
+	pub(crate) fn new(n: u16) -> Option<Self> {
+		match n {
+			ffi::PTP_AC_ReadWrite => Some(Self::ReadWrite),
+			ffi::PTP_AC_ReadOnly => Some(Self::Read),
+			ffi::PTP_AC_ReadOnly_with_Object_Deletion => Some(Self::ReadDelete),
+			_ => None,
+		}
 	}
 }
 

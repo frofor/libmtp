@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.2
+
+Updated storage API:
+- Added `Storage::kind` for retrieving the kind of the storage.
+- Added `Storage::fs` for retrieving the filesystem of the storage.
+- Added `Storage::access` for retrieving the access capability over the storage.
+
+Updated object API:
+- Added `Object::if_folder` and `Object::is_file` for checking if the object is folder or file.
+
 ## 0.4.1
 
 Added functions for constructing device from the serial number or the order number.

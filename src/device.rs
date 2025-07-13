@@ -98,68 +98,6 @@ impl Device {
 		Self { raw, inner: unsafe { *ptr }, inner_ptr: ptr }
 	}
 
-	/// Refreshes storages information for the device.
-	///
-	/// # Errors
-	///
-	/// Returns an error if the operation has failed.
-	///
-	/// # Examples
-	///
-	/// ```no_run
-	/// use libmtp::Device;
-	///
-	/// # fn main() -> libmtp::Result<()> {
-	/// let device = Device::from_serial("GVEV4I3E0WU1")?.expect("Device should exist");
-	/// let storage = device.find_storage(65537).expect("Storage should exist");
-	///
-	/// println!("Before: {}", storage.free_space());
-	/// device.refresh()?;
-	/// println!("After: {}", storage.free_space());
-	/// # Ok(())
-	/// # }
-	/// ```
-	pub fn refresh(&self) -> Result<()> {
-		let n = unsafe {
-			ffi::LIBMTP_Get_Storage(self.inner_ptr, ffi::LIBMTP_STORAGE_SORTBY_NOTSORTED)
-		};
-		if n != 0 {
-			return Err(self.pop_err().unwrap_or_default());
-		}
-		Ok(())
-	}
-
-	/// Changes the friendly name of the device.
-	///
-	/// # Errors
-	///
-	/// Returns an error if the device doesn't have a support for friendly names or if the
-	/// operation has failed.
-	///
-	/// # Panics
-	///
-	/// Panics if the friendly name of the storage contains a nul byte.
-	///
-	/// # Examples
-	///
-	/// ```no_run
-	/// use libmtp::Device;
-	///
-	/// # fn main() -> libmtp::Result<()> {
-	/// let device = Device::from_serial("GVEV4I3E0WU1")?.expect("Device should exist");
-	/// device.rename("Bob's Phone")?;
-	/// # Ok(())
-	/// # }
-	/// ```
-	pub fn rename(&self, name: &str) -> Result<()> {
-		let name = CString::new(name).expect("Name should not contain a nul byte");
-		let n = unsafe { ffi::LIBMTP_Set_Friendlyname(self.inner_ptr, name.as_ptr()) };
-		if n != 0 {
-			return Err(self.pop_err().unwrap_or_default());
-		}
-		Ok(())
-	}
-
 	/// Retrieves the serial number of the device.
 	///
 	/// # Panics
@@ -497,6 +435,78 @@ impl Device {
 		Some(id)
 	}
 
+	/// Retrieves the underlying structure of the device.
+	pub(crate) fn inner(&self) -> ffi::LIBMTP_mtpdevice_t {
+		self.inner
+	}
+
+	/// Retrieves the pointer to the underlying structure of the device.
+	pub(crate) fn inner_ptr(&self) -> *mut ffi::LIBMTP_mtpdevice_t {
+		self.inner_ptr
+	}
+
+	/// Refreshes storages information for the device.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	///
+	/// # Examples
+	///
+	/// ```no_run
+	/// use libmtp::Device;
+	///
+	/// # fn main() -> libmtp::Result<()> {
+	/// let device = Device::from_serial("GVEV4I3E0WU1")?.expect("Device should exist");
+	/// let storage = device.find_storage(65537).expect("Storage should exist");
+	///
+	/// println!("Before: {}", storage.free_space());
+	/// device.refresh()?;
+	/// println!("After: {}", storage.free_space());
+	/// # Ok(())
+	/// # }
+	/// ```
+	pub fn refresh(&self) -> Result<()> {
+		let n = unsafe {
+			ffi::LIBMTP_Get_Storage(self.inner_ptr, ffi::LIBMTP_STORAGE_SORTBY_NOTSORTED)
+		};
+		if n != 0 {
+			return Err(self.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
+	/// Changes the friendly name of the device.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the device doesn't have a support for friendly names or if the
+	/// operation has failed.
+	///
+	/// # Panics
+	///
+	/// Panics if the friendly name of the storage contains a nul byte.
+	///
+	/// # Examples
+	///
+	/// ```no_run
+	/// use libmtp::Device;
+	///
+	/// # fn main() -> libmtp::Result<()> {
+	/// let device = Device::from_serial("GVEV4I3E0WU1")?.expect("Device should exist");
+	/// device.rename("Bob's Phone")?;
+	/// # Ok(())
+	/// # }
+	/// ```
+	pub fn rename(&self, name: &str) -> Result<()> {
+		let name = CString::new(name).expect("Name should not contain a nul byte");
+		let n = unsafe { ffi::LIBMTP_Set_Friendlyname(self.inner_ptr, name.as_ptr()) };
+		if n != 0 {
+			return Err(self.pop_err().unwrap_or_default());
+		}
+		Ok(())
+	}
+
 	/// Retrieves an iterator over the storages of the device.
 	///
 	/// # Examples
@@ -542,16 +552,6 @@ impl Device {
 			}
 		}
 		None
-	}
-
-	/// Retrieves the underlying structure of the device.
-	pub(crate) fn inner(&self) -> ffi::LIBMTP_mtpdevice_t {
-		self.inner
-	}
-
-	/// Retrieves the pointer to the underlying structure of the device.
-	pub(crate) fn inner_ptr(&self) -> *mut ffi::LIBMTP_mtpdevice_t {
-		self.inner_ptr
 	}
 
 	/// Pops the last error from the error stack.
@@ -699,50 +699,6 @@ impl RawDevice {
 		Self { inner: unsafe { *ptr }, inner_ptr: ptr }
 	}
 
-	/// Attempts to open the device, with caching.
-	///
-	/// # Examples
-	///
-	/// ```no_run
-	/// use libmtp::RawDevice;
-	///
-	/// # fn main() -> libmtp::Result<()> {
-	/// let raw_device = RawDevice::from_order(1)?.expect("Device should exist");
-	/// if let Some(device) = raw_device.open() {
-	///     println!("{device:?}");
-	/// } else {
-	///     println!("Failed to open device");
-	/// }
-	/// # Ok(())
-	/// # }
-	/// ```
-	pub fn open(self) -> Option<Device> {
-		let ptr = unsafe { ffi::LIBMTP_Open_Raw_Device(self.inner_ptr) };
-		if ptr.is_null() { None } else { Some(unsafe { Device::new_unchecked(self, ptr) }) }
-	}
-
-	/// Attempts to open the device, without caching.
-	///
-	/// # Examples
-	///
-	/// ```no_run
-	/// use libmtp::RawDevice;
-	///
-	/// # fn main() -> libmtp::Result<()> {
-	/// let raw_device = RawDevice::from_order(1)?.expect("Device should exist");
-	/// if let Some(device) = raw_device.open_uncached() {
-	///     println!("{device:?}");
-	/// } else {
-	///     println!("Failed to open device");
-	/// }
-	/// # Ok(())
-	/// # }
-	/// ```
-	pub fn open_uncached(self) -> Option<Device> {
-		let ptr = unsafe { ffi::LIBMTP_Open_Raw_Device_Uncached(self.inner_ptr) };
-		if ptr.is_null() { None } else { Some(unsafe { Device::new_unchecked(self, ptr) }) }
-	}
-
 	/// Retrieves the order number of the device.
 	///
 	/// # Examples
@@ -752,8 +708,7 @@ impl RawDevice {
 	///
 	/// # fn main() -> libmtp::Result<()> {
 	/// let raw_device = RawDevice::from_order(1)?.expect("Device should exist");
-	/// let device = raw_device.open().expect("Device should open");
-	/// println!("{device:?}");
+	/// assert_eq!(raw_device.order(), 1);
 	/// # Ok(())
 	/// # }
 	/// ```
@@ -801,6 +756,50 @@ impl RawDevice {
 	/// ```
 	pub fn product(&self) -> Product {
 		Product::new(self.inner.device_entry)
+	}
+
+	/// Attempts to open the device, with caching.
+	///
+	/// # Examples
+	///
+	/// ```no_run
+	/// use libmtp::RawDevice;
+	///
+	/// # fn main() -> libmtp::Result<()> {
+	/// let raw_device = RawDevice::from_order(1)?.expect("Device should exist");
+	/// if let Some(device) = raw_device.open() {
+	///     println!("{device:?}");
+	/// } else {
+	///     println!("Failed to open device");
+	/// }
+	/// # Ok(())
+	/// # }
+	/// ```
+	pub fn open(self) -> Option<Device> {
+		let ptr = unsafe { ffi::LIBMTP_Open_Raw_Device(self.inner_ptr) };
+		if ptr.is_null() { None } else { Some(unsafe { Device::new_unchecked(self, ptr) }) }
+	}
+
+	/// Attempts to open the device, without caching.
+	///
+	/// # Examples
+	///
+	/// ```no_run
+	/// use libmtp::RawDevice;
+	///
+	/// # fn main() -> libmtp::Result<()> {
+	/// let raw_device = RawDevice::from_order(1)?.expect("Device should exist");
+	/// if let Some(device) = raw_device.open_uncached() {
+	///     println!("{device:?}");
+	/// } else {
+	///     println!("Failed to open device");
+	/// }
+	/// # Ok(())
+	/// # }
+	/// ```
+	pub fn open_uncached(self) -> Option<Device> {
+		let ptr = unsafe { ffi::LIBMTP_Open_Raw_Device_Uncached(self.inner_ptr) };
+		if ptr.is_null() { None } else { Some(unsafe { Device::new_unchecked(self, ptr) }) }
 	}
 }
 
