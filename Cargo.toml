@@ -6,7 +6,7 @@ edition = "2024"
 description = "A memory safe API for interacting with libmtp library"
 repository = "https://codeberg.org/frofor/libmtp"
 license = "MIT"
-keywords = ["mtp", "media", "file-transfer"]
+keywords = ["android", "file-transfer", "libmtp"]
 categories = ["api-bindings", "filesystem", "multimedia"]
 
 [profile.release]
@@ -15,4 +15,4 @@ lto = true
 codegen-units = 1
 
 [dependencies]
-libc = "0.2.174"
+libc = "0.2.177"
