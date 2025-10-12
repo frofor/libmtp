@@ -10,7 +10,7 @@ use std::slice;
 /// # Safety
 ///
 /// `ptr` should be a valid pointer to a null-terminated string.
-pub(crate) unsafe fn ptr_to_string(ptr: *const c_char) -> String {
+pub unsafe fn ptr_to_string(ptr: *const c_char) -> String {
 	let mut len = 0;
 	let mut c = unsafe { *ptr.offset(len) };
 
@@ -19,12 +19,13 @@ pub(crate) unsafe fn ptr_to_string(ptr: *const c_char) -> String {
 		c = unsafe { *ptr.offset(len) };
 	}
 
-	let bytes = unsafe { slice::from_raw_parts(ptr as *const u8, len as usize) };
+	#[allow(clippy::cast_sign_loss)]
+	let bytes = unsafe { slice::from_raw_parts(ptr.cast(), len as usize) };
 	String::from_utf8_lossy(bytes).into_owned()
 }
 
 #[cfg(any(unix, windows))]
-pub(crate) fn path_to_cstring(path: &Path) -> CString {
+pub fn path_to_cstring(path: &Path) -> CString {
 	#[cfg(unix)]
 	{
 		use std::os::unix::ffi::OsStrExt;

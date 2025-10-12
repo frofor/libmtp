@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+Fixed `Folder::iter` and `Folder::iter_recursive` not iterating correctly.
+
 ## 0.4.2
 
 Updated storage API:
@@ -8,7 +12,7 @@ Updated storage API:
 - Added `Storage::access` for retrieving the access capability over the storage.
 
 Updated object API:
-- Added `Object::if_folder` and `Object::is_file` for checking if the object is folder or file.
+- Added `Object::is_folder` and `Object::is_file` for checking if the object is a folder or file.
 
 ## 0.4.1
 
@@ -38,8 +42,7 @@ Updated object API:
 ## 0.3.5
 
 Updated device API:
-- Replaced `max_battery_percent` method with `battery` method for retrieving the battery of the device.
-  `battery` method returns `Battery` struct that contains the current and the maximum battery percentage.
+- Replaced `max_battery_percent` method with `battery`, which returns `Battery` struct containing the current and the maximum battery percentage.
 
 ## 0.3.4
 

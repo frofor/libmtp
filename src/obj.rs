@@ -4,11 +4,9 @@ use crate::Result;
 use crate::Storage;
 use crate::convert::path_to_cstring;
 use crate::ffi;
-use crate::object;
 use libc::time_t;
 use std::ffi::CStr;
 use std::ffi::CString;
-use std::ffi::c_char;
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Formatter;
@@ -45,6 +43,7 @@ impl<'a> Object<'a> {
 	}
 
 	/// Retrieves the ID of the object.
+	#[must_use]
 	pub fn id(&self) -> u32 {
 		match self {
 			Self::Folder(f) => f.id(),
@@ -53,6 +52,7 @@ impl<'a> Object<'a> {
 	}
 
 	/// Retrieves the name of the object.
+	#[must_use]
 	pub fn name(&self) -> &str {
 		match self {
 			Self::Folder(f) => f.name(),
@@ -61,11 +61,13 @@ impl<'a> Object<'a> {
 	}
 
 	/// Checks if the object is folder.
+	#[must_use]
 	pub fn is_folder(&self) -> bool {
 		matches!(self, Self::Folder(_))
 	}
 
 	/// Checks if the object is file.
+	#[must_use]
 	pub fn is_file(&self) -> bool {
 		matches!(self, Self::File(_))
 	}
@@ -93,7 +95,7 @@ impl<'a> Object<'a> {
 	///
 	/// Returns an error if an object with the same name already exists in the other folder or
 	/// if the operation has failed.
-	pub fn move_to(&self, parent: Folder) -> Result<()> {
+	pub fn move_to(&self, parent: &Folder) -> Result<()> {
 		match self {
 			Self::Folder(f) => f.move_to(parent),
 			Self::File(f) => f.move_to(parent),
@@ -106,7 +108,7 @@ impl<'a> Object<'a> {
 	///
 	/// Returns an error if an object with the same name already exists in the other folder or
 	/// if the operation has failed.
-	pub fn copy_to(&self, parent: Folder) -> Result<()> {
+	pub fn copy_to(&self, parent: &Folder) -> Result<()> {
 		match self {
 			Self::Folder(f) => f.copy_to(parent),
 			Self::File(f) => f.copy_to(parent),
@@ -150,6 +152,7 @@ impl<'a> Folder<'a> {
 	}
 
 	/// Retrieves the ID of the folder.
+	#[must_use]
 	pub fn id(&self) -> u32 {
 		self.inner.item_id
 	}
@@ -159,6 +162,7 @@ impl<'a> Folder<'a> {
 	/// # Panics
 	///
 	/// Panics if the name of the folder is not a valid UTF-8.
+	#[must_use]
 	pub fn name(&self) -> &str {
 		let name = self.inner.filename;
 		unsafe { CStr::from_ptr(name).to_str().expect("Folder name should be a valid UTF-8") }
@@ -181,7 +185,7 @@ impl<'a> Folder<'a> {
 	/// Panics if the name of the folder contains a nul byte.
 	pub fn rename(&self, name: &str) -> Result<()> {
 		let name = CString::new(name).expect("Folder name should not contain a nul byte");
-		let name_ptr = name.as_ptr() as *mut c_char;
+		let name_ptr = name.as_ptr();
 		let dev = self.owner().owner();
 
 		let n = unsafe { ffi::LIBMTP_Set_File_Name(dev.inner_ptr(), self.inner_ptr, name_ptr) };
@@ -197,7 +201,7 @@ impl<'a> Folder<'a> {
 	///
 	/// Returns an error if an object with the same name already exists in the other folder or
 	/// if the operation has failed.
-	pub fn move_to(&self, parent: Folder) -> Result<()> {
+	pub fn move_to(&self, parent: &Folder) -> Result<()> {
 		let storage = self.owner();
 		let dev = storage.owner();
 		let dev_ptr = dev.inner_ptr();
@@ -215,7 +219,7 @@ impl<'a> Folder<'a> {
 	///
 	/// Returns an error if an object with the same name already exists in the other folder or
 	/// if the operation has failed.
-	pub fn copy_to(&self, parent: Folder) -> Result<()> {
+	pub fn copy_to(&self, parent: &Folder) -> Result<()> {
 		let storage = self.owner();
 		let dev = storage.owner();
 		let dev_ptr = dev.inner_ptr();
@@ -254,7 +258,7 @@ impl<'a> Folder<'a> {
 	/// Panics if the name of the folder contains a nul byte.
 	pub fn create_folder(&self, name: &str) -> Result<u32> {
 		let name = CString::new(name).expect("Folder name should not contain a nul byte");
-		let name_ptr = name.as_ptr() as *mut c_char;
+		let name_ptr = name.as_ptr().cast_mut();
 		let storage = self.owner();
 		let dev = storage.owner();
 		let dev_ptr = dev.inner_ptr();
@@ -295,27 +299,24 @@ impl<'a> Folder<'a> {
 		let file = unsafe { &mut *ffi::LIBMTP_new_file_t() };
 		file.parent_id = self.id();
 		file.storage_id = self.owner().id();
-		file.filename = name.as_ptr() as *mut i8;
+		file.filename = name.as_ptr().cast_mut();
 		file.filesize = metadata.len();
-		file.modificationdate = metadata
-			.modified()
-			.unwrap_or(UNIX_EPOCH)
-			.duration_since(UNIX_EPOCH)
-			.expect("Modification date should not be before Unix epoch")
-			.as_secs() as time_t;
+		#[allow(clippy::cast_possible_wrap)]
+		{
+			file.modificationdate = metadata
+				.modified()
+				.unwrap_or(UNIX_EPOCH)
+				.duration_since(UNIX_EPOCH)
+				.expect("Modification date should not be before Unix epoch")
+				.as_secs() as time_t;
+		}
 		file.filetype = kind.to_ffi();
 
 		let dev = self.owner().owner();
 		let path = path_to_cstring(path);
 
 		let n = unsafe {
-			ffi::LIBMTP_Send_File_From_File(
-				dev.inner_ptr(),
-				path.as_ptr() as *const c_char,
-				file as *mut _,
-				None,
-				ptr::null(),
-			)
+			ffi::LIBMTP_Send_File_From_File(dev.inner_ptr(), path.as_ptr(), file, None, ptr::null())
 		};
 		if n != 0 {
 			return Err(dev.pop_err().unwrap_or_default());
@@ -324,31 +325,43 @@ impl<'a> Folder<'a> {
 	}
 
 	/// Retrieves an iterator over the objects of the folder.
+	#[must_use]
 	pub fn iter(&self) -> ObjectIter {
-		unsafe { ObjectIter::new_unchecked(self.owner, self.inner_ptr, Ownership::Borrows) }
+		let ptr = unsafe {
+			ffi::LIBMTP_Get_Files_And_Folders(
+				self.owner.owner().inner_ptr(),
+				self.owner.id(),
+				self.id(),
+			)
+		};
+		unsafe { ObjectIter::new_unchecked(self.owner, ptr, Ownership::Borrows) }
 	}
 
 	/// Retrieves a recursive iterator over the objects of the folder.
+	#[must_use]
 	pub fn iter_recursive(&self) -> ObjectRecursiveIter {
-		unsafe {
-			ObjectRecursiveIter::new_unchecked(self.owner, self.inner_ptr, Ownership::Borrows)
-		}
+		let ptr = unsafe {
+			ffi::LIBMTP_Get_Files_And_Folders(
+				self.owner.owner().inner_ptr(),
+				self.owner.id(),
+				self.id(),
+			)
+		};
+		unsafe { ObjectRecursiveIter::new_unchecked(self.owner, ptr, Ownership::Borrows) }
 	}
 }
 
 #[doc(hidden)]
-impl<'a> Drop for Folder<'a> {
+impl Drop for Folder<'_> {
 	fn drop(&mut self) {
 		if self.ownership == Ownership::Borrows {
 			return;
 		}
-		unsafe {
-			ffi::LIBMTP_destroy_file_t(self.inner_ptr);
-		}
+		unsafe { ffi::LIBMTP_destroy_file_t(self.inner_ptr) };
 	}
 }
 
-impl<'a> Debug for Folder<'a> {
+impl Debug for Folder<'_> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		f.debug_struct("Folder").field("id", &self.id()).field("name", &self.name()).finish()
 	}
@@ -356,7 +369,7 @@ impl<'a> Debug for Folder<'a> {
 
 impl<'a> IntoIterator for &'a Folder<'a> {
 	type Item = Object<'a>;
-	type IntoIter = object::ObjectIter<'a>;
+	type IntoIter = ObjectIter<'a>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.iter()
@@ -394,6 +407,7 @@ impl<'a> File<'a> {
 	}
 
 	/// Retrieves the ID of the file.
+	#[must_use]
 	pub fn id(&self) -> u32 {
 		self.inner.item_id
 	}
@@ -403,18 +417,25 @@ impl<'a> File<'a> {
 	/// # Panics
 	///
 	/// Panics if the name of the file is not a valid UTF-8.
+	#[must_use]
 	pub fn name(&self) -> &str {
 		let name = self.inner.filename;
 		unsafe { CStr::from_ptr(name).to_str().expect("File name should be a valid UTF-8") }
 	}
 
 	/// Retrieves the kind of the file.
+	///
+	/// # Panics
+	///
+	/// Panics if the kind of the file is a folder, an album or a playlist.
+	#[must_use]
 	pub fn kind(&self) -> FileKind {
 		FileKind::new(self.inner.filetype)
 			.expect("File type should not be a folder, an album or a playlist")
 	}
 
 	/// Retrieves the total size in bytes of the file.
+	#[must_use]
 	pub fn size(&self) -> u64 {
 		self.inner.filesize
 	}
@@ -434,9 +455,9 @@ impl<'a> File<'a> {
 	/// # Panics
 	///
 	/// Panics if the name of the file contains a nul byte.
-	pub fn rename<'b>(&self, name: &'b str) -> Result<()> {
+	pub fn rename(&self, name: &str) -> Result<()> {
 		let name = CString::new(name).expect("File name should not contain a nul byte");
-		let name_ptr = name.as_ptr() as *mut c_char;
+		let name_ptr = name.as_ptr();
 		let dev = self.owner().owner();
 
 		let n = unsafe { ffi::LIBMTP_Set_File_Name(dev.inner_ptr(), self.inner_ptr, name_ptr) };
@@ -452,7 +473,7 @@ impl<'a> File<'a> {
 	///
 	/// Returns an error if an object with the same name already exists in the other folder or
 	/// if the operation has failed.
-	pub fn move_to(&self, parent: Folder) -> Result<()> {
+	pub fn move_to(&self, parent: &Folder) -> Result<()> {
 		let storage = self.owner();
 		let dev = storage.owner();
 		let dev_ptr = dev.inner_ptr();
@@ -470,7 +491,7 @@ impl<'a> File<'a> {
 	///
 	/// Returns an error if an object with the same name already exists in the other folder or
 	/// if the operation has failed.
-	pub fn copy_to(&self, parent: Folder) -> Result<()> {
+	pub fn copy_to(&self, parent: &Folder) -> Result<()> {
 		let storage = self.owner();
 		let dev = storage.owner();
 		let dev_ptr = dev.inner_ptr();
@@ -498,7 +519,7 @@ impl<'a> File<'a> {
 			ffi::LIBMTP_Get_File_To_File(
 				dev.inner_ptr(),
 				self.id(),
-				path.as_ptr() as *const i8,
+				path.as_ptr(),
 				None,
 				ptr::null(),
 			)
@@ -526,15 +547,13 @@ impl<'a> File<'a> {
 }
 
 #[doc(hidden)]
-impl<'a> Drop for File<'a> {
+impl Drop for File<'_> {
 	fn drop(&mut self) {
-		unsafe {
-			ffi::LIBMTP_destroy_file_t(self.inner_ptr);
-		}
+		unsafe { ffi::LIBMTP_destroy_file_t(self.inner_ptr) };
 	}
 }
 
-impl<'a> Debug for File<'a> {
+impl Debug for File<'_> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		f.debug_struct("File")
 			.field("id", &self.id())
@@ -571,6 +590,7 @@ pub enum FileKind {
 	/// Advanced Streaming Format.
 	Asf,
 	/// QuickTime.
+	#[allow(clippy::doc_markdown)]
 	Qt,
 	/// Other video format.
 	OtherVideo,
@@ -623,6 +643,7 @@ pub enum FileKind {
 	/// Microsoft Excel Spreadsheet.
 	Xls,
 	/// Microsoft PowerPoint Presentation.
+	#[allow(clippy::doc_markdown)]
 	Ppt,
 	/// MIME encapsulation of aggregate HTML documents.
 	Mht,
@@ -735,7 +756,7 @@ impl FileKind {
 }
 
 /// An iterator over the objects of the folder.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct ObjectIter<'a> {
 	/// The storage to which the object belongs.
 	storage: &'a Storage<'a>,
@@ -807,10 +828,7 @@ impl<'a> Iterator for ObjectRecursiveIter<'a> {
 
 	fn next(&mut self) -> Option<Self::Item> {
 		while self.ptr.is_null() {
-			let Some(id) = self.stack.pop() else {
-				return None;
-			};
-
+			let id = self.stack.pop()?;
 			let dev_ptr = self.storage.owner().inner_ptr();
 			let storage_id = self.storage.id();
 			self.ptr = unsafe { ffi::LIBMTP_Get_Files_And_Folders(dev_ptr, storage_id, id) };

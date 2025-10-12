@@ -38,6 +38,7 @@ impl<'a> Storage<'a> {
 	}
 
 	/// Retrieves the ID of the storage.
+	#[must_use]
 	pub fn id(&self) -> u32 {
 		self.inner.id
 	}
@@ -47,6 +48,7 @@ impl<'a> Storage<'a> {
 	/// # Panics
 	///
 	/// Panics if the friendly name of the storage is not a valid UTF-8.
+	#[must_use]
 	pub fn name(&self) -> Option<&str> {
 		let ptr = self.inner.StorageDescription;
 		if ptr.is_null() {
@@ -56,26 +58,31 @@ impl<'a> Storage<'a> {
 	}
 
 	/// Retrieves the kind of the storage.
+	#[must_use]
 	pub fn kind(&self) -> Option<StorageKind> {
 		StorageKind::new(self.inner.StorageType)
 	}
 
 	/// Retrieves the filesystem of the storage.
+	#[must_use]
 	pub fn fs(&self) -> Option<Filesystem> {
 		Filesystem::new(self.inner.FilesystemType)
 	}
 
 	/// Retrieves the access capability over the storage.
+	#[must_use]
 	pub fn access(&self) -> Option<StorageAccess> {
 		StorageAccess::new(self.inner.AccessCapability)
 	}
 
 	/// Retrieves the total space in bytes of the storage.
+	#[must_use]
 	pub fn total_space(&self) -> u64 {
 		self.inner.MaxCapacity
 	}
 
 	/// Retrieves the free space in bytes of the storage.
+	#[must_use]
 	pub fn free_space(&self) -> u64 {
 		self.inner.FreeSpaceInBytes
 	}
@@ -105,6 +112,7 @@ impl<'a> Storage<'a> {
 	}
 
 	/// Retrieves an iterator over the objects in the root of the storage.
+	#[must_use]
 	pub fn iter(&self) -> ObjectIter {
 		let ptr = unsafe {
 			ffi::LIBMTP_Get_Files_And_Folders(
@@ -117,6 +125,7 @@ impl<'a> Storage<'a> {
 	}
 
 	/// Retrieves a recursive iterator over the objects of the storage.
+	#[must_use]
 	pub fn iter_recursive(&self) -> ObjectRecursiveIter {
 		let ptr = unsafe {
 			ffi::LIBMTP_Get_Files_And_Folders(
@@ -138,13 +147,13 @@ impl<'a> IntoIterator for &'a Storage<'a> {
 	}
 }
 
-impl<'a> Display for Storage<'a> {
+impl Display for Storage<'_> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.name().unwrap_or("Unnamed storage"))
 	}
 }
 
-impl<'a> Debug for Storage<'a> {
+impl Debug for Storage<'_> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		f.debug_struct("Storage")
 			.field("id", &self.id())
@@ -239,7 +248,7 @@ impl StorageAccess {
 }
 
 /// An iterator over the storages of the device.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct StorageIter<'a> {
 	/// The device to which the storage belongs.
 	dev: &'a Device,

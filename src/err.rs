@@ -58,7 +58,7 @@ impl Display for Error {
 #[doc(hidden)]
 impl Default for Error {
 	fn default() -> Self {
-		Self { kind: Default::default(), text: "Unknown error".to_owned() }
+		Self { kind: ErrorKind::default(), text: "Unknown error".to_owned() }
 	}
 }
 
@@ -119,6 +119,7 @@ impl MtpErrorKind {
 }
 
 #[doc(hidden)]
+#[allow(clippy::derivable_impls)]
 impl Default for ErrorKind {
 	fn default() -> Self {
 		ErrorKind::Unknown

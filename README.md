@@ -17,10 +17,11 @@ $ cargo add libmtp
 To get started, create a new program that prints all objects in the root folder of your storage:
 
 ```rust
+use libmtp::RawDevice;
 use libmtp::search_raw_devices;
 
 fn main() -> libmtp::Result<()> {
-	for device in search_raw_devices()?.filter_map(|r| r.open_uncached()) {
+	for device in search_raw_devices()?.filter_map(RawDevice::open_uncached) {
 		for storage in &device {
 			for object in &storage {
 				println!("{object:?}");

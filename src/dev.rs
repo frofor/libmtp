@@ -10,7 +10,6 @@ use crate::convert::ptr_to_string;
 use crate::ffi;
 use std::ffi::CStr;
 use std::ffi::CString;
-use std::ffi::c_void;
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -36,14 +35,12 @@ use std::ptr;
 /// # }
 /// ```
 pub fn search_raw_devices() -> Result<RawDeviceIter> {
-	unsafe {
-		ffi::LIBMTP_Init();
-	};
+	unsafe { ffi::LIBMTP_Init() };
 
 	let mut ptr = ptr::null_mut();
 	let mut len = 0;
 
-	let n = unsafe { ffi::LIBMTP_Detect_Raw_Devices(&mut ptr, &mut len) };
+	let n = unsafe { ffi::LIBMTP_Detect_Raw_Devices(&raw mut ptr, &raw mut len) };
 	match MtpErrorKind::new(n) {
 		Some(kind) if kind != MtpErrorKind::NoDeviceAttached => {
 			Err(Error::new(ErrorKind::Mtp(kind), "Failed to discover raw devices"))
@@ -66,6 +63,10 @@ pub struct Device {
 impl Device {
 	/// Searches the device by the serial number.
 	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
+	///
 	/// # Examples
 	///
 	/// ```no_run
@@ -81,7 +82,7 @@ impl Device {
 	/// # }
 	/// ```
 	pub fn from_serial(serial: &str) -> Result<Option<Self>> {
-		for dev in search_raw_devices()?.filter_map(|r| r.open_uncached()) {
+		for dev in search_raw_devices()?.filter_map(RawDevice::open_uncached) {
 			if dev.serial()? == serial {
 				return Ok(Some(dev));
 			}
@@ -103,6 +104,10 @@ impl Device {
 	/// # Panics
 	///
 	/// Panics if the serial number of the device is not a valid UTF-8.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
 	///
 	/// # Examples
 	///
@@ -152,9 +157,7 @@ impl Device {
 		}
 
 		let name = unsafe { ptr_to_string(ptr) };
-		unsafe {
-			libc::free(ptr as *mut c_void);
-		}
+		unsafe { libc::free(ptr.cast()) };
 		Ok(name)
 	}
 
@@ -175,6 +178,7 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn vendor(&self) -> Vendor {
 		self.raw.vendor()
 	}
@@ -195,6 +199,7 @@ impl Device {
 	/// println!("{:?}", device.product());
 	/// # Ok(())
 	/// # }
+	#[must_use]
 	pub fn product(&self) -> Product {
 		self.raw.product()
 	}
@@ -220,7 +225,7 @@ impl Device {
 		let mut now = 0;
 		let mut max = 0;
 
-		let n = unsafe { ffi::LIBMTP_Get_Batterylevel(self.inner_ptr, &mut max, &mut now) };
+		let n = unsafe { ffi::LIBMTP_Get_Batterylevel(self.inner_ptr, &raw mut max, &raw mut now) };
 		if n != 0 {
 			return Err(self.pop_err().unwrap_or_default());
 		}
@@ -245,6 +250,7 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn music_folder_id(&self) -> Option<u32> {
 		let id = self.inner.default_music_folder;
 		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
@@ -271,6 +277,7 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn playlist_folder_id(&self) -> Option<u32> {
 		let id = self.inner.default_playlist_folder;
 		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
@@ -297,6 +304,7 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn picture_folder_id(&self) -> Option<u32> {
 		let id = self.inner.default_picture_folder;
 		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
@@ -323,6 +331,7 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn video_folder_id(&self) -> Option<u32> {
 		let id = self.inner.default_video_folder;
 		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
@@ -349,6 +358,7 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn organizer_folder_id(&self) -> Option<u32> {
 		let id = self.inner.default_organizer_folder;
 		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
@@ -375,6 +385,8 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
+	#[allow(clippy::doc_markdown)]
 	pub fn zencast_folder_id(&self) -> Option<u32> {
 		let id = self.inner.default_zencast_folder;
 		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
@@ -401,6 +413,7 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn album_folder_id(&self) -> Option<u32> {
 		let id = self.inner.default_album_folder;
 		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
@@ -427,6 +440,7 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn text_folder_id(&self) -> Option<u32> {
 		let id = self.inner.default_text_folder;
 		if id == ffi::LIBMTP_FILES_AND_FOLDERS_ROOT {
@@ -523,6 +537,7 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn iter(&self) -> StorageIter {
 		StorageIter::new(self)
 	}
@@ -545,22 +560,16 @@ impl Device {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn find_storage(&self, id: u32) -> Option<Storage> {
-		for storage in self {
-			if storage.id() == id {
-				return Some(storage);
-			}
-		}
-		None
+		self.iter().find(|s| s.id() == id)
 	}
 
 	/// Pops the last error from the error stack.
 	pub(crate) fn pop_err(&self) -> Option<Error> {
 		let stack = unsafe { ffi::LIBMTP_Get_Errorstack(self.inner_ptr) };
 		let err = Error::from_ffi(stack);
-		unsafe {
-			ffi::LIBMTP_Clear_Errorstack(self.inner_ptr);
-		}
+		unsafe { ffi::LIBMTP_Clear_Errorstack(self.inner_ptr) };
 		err
 	}
 }
@@ -568,9 +577,7 @@ impl Device {
 #[doc(hidden)]
 impl Drop for Device {
 	fn drop(&mut self) {
-		unsafe {
-			ffi::LIBMTP_Release_Device(self.inner_ptr);
-		}
+		unsafe { ffi::LIBMTP_Release_Device(self.inner_ptr) };
 	}
 }
 
@@ -623,6 +630,7 @@ impl Battery {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn now(&self) -> u8 {
 		self.now
 	}
@@ -641,6 +649,7 @@ impl Battery {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn max(&self) -> u8 {
 		self.max
 	}
@@ -666,6 +675,10 @@ pub struct RawDevice {
 
 impl RawDevice {
 	/// Searches the device by the order number.
+	///
+	/// # Errors
+	///
+	/// Returns an error if the operation has failed.
 	///
 	/// # Examples
 	///
@@ -712,6 +725,7 @@ impl RawDevice {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn order(&self) -> u8 {
 		self.inner.devnum
 	}
@@ -733,6 +747,7 @@ impl RawDevice {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn vendor(&self) -> Vendor {
 		Vendor::new(self.inner.device_entry)
 	}
@@ -754,6 +769,7 @@ impl RawDevice {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn product(&self) -> Product {
 		Product::new(self.inner.device_entry)
 	}
@@ -775,6 +791,7 @@ impl RawDevice {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn open(self) -> Option<Device> {
 		let ptr = unsafe { ffi::LIBMTP_Open_Raw_Device(self.inner_ptr) };
 		if ptr.is_null() { None } else { Some(unsafe { Device::new_unchecked(self, ptr) }) }
@@ -797,6 +814,7 @@ impl RawDevice {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn open_uncached(self) -> Option<Device> {
 		let ptr = unsafe { ffi::LIBMTP_Open_Raw_Device_Uncached(self.inner_ptr) };
 		if ptr.is_null() { None } else { Some(unsafe { Device::new_unchecked(self, ptr) }) }
@@ -806,9 +824,7 @@ impl RawDevice {
 #[doc(hidden)]
 impl Drop for RawDevice {
 	fn drop(&mut self) {
-		unsafe {
-			libc::free(self.inner_ptr as *mut c_void);
-		}
+		unsafe { libc::free(self.inner_ptr.cast()) };
 	}
 }
 
@@ -831,7 +847,7 @@ pub struct Vendor<'a> {
 	name: &'a str,
 }
 
-impl<'a> Vendor<'a> {
+impl Vendor<'_> {
 	/// Constructs a new vendor.
 	///
 	/// # Panics
@@ -858,6 +874,7 @@ impl<'a> Vendor<'a> {
 	/// # Ok(())
 	/// # }
 	/// ```
+	#[must_use]
 	pub fn id(&self) -> u16 {
 		self.id
 	}
@@ -874,12 +891,13 @@ impl<'a> Vendor<'a> {
 	/// println!("{}", raw_device.vendor().name());
 	/// # Ok(())
 	/// # }
+	#[must_use]
 	pub fn name(&self) -> &str {
 		self.name
 	}
 }
 
-impl<'a> Display for Vendor<'a> {
+impl Display for Vendor<'_> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.name)
 	}
@@ -894,7 +912,7 @@ pub struct Product<'a> {
 	name: &'a str,
 }
 
-impl<'a> Product<'a> {
+impl Product<'_> {
 	/// Constructs a new product.
 	///
 	/// # Panics
@@ -920,6 +938,7 @@ impl<'a> Product<'a> {
 	/// println!("{}", raw_device.product().id());
 	/// # Ok(())
 	/// # }
+	#[must_use]
 	pub fn id(&self) -> u16 {
 		self.id
 	}
@@ -936,19 +955,20 @@ impl<'a> Product<'a> {
 	/// println!("{}", raw_device.product().name());
 	/// # Ok(())
 	/// # }
+	#[must_use]
 	pub fn name(&self) -> &str {
 		self.name
 	}
 }
 
-impl<'a> Display for Product<'a> {
+impl Display for Product<'_> {
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.name)
 	}
 }
 
 /// An iterator over the raw devices.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct RawDeviceIter {
 	/// The pointer to the underlying structure of the raw device.
 	ptr: *mut ffi::LIBMTP_raw_device_t,
