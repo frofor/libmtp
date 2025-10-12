@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+Updated object API:
+- Added `Object::owner`, `Folder::owner` and `File::owner` for retrieving the storage to which the object belongs.
+- Added `Object::parent`, `Folder::parent` and `File::parent` for retrieving the folder to which the object belongs.
+
 ## 0.5.0
 
 Fixed `Folder::iter` and `Folder::iter_recursive` not iterating correctly.

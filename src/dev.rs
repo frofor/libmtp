@@ -95,6 +95,7 @@ impl Device {
 	/// # Safety
 	///
 	/// `ptr` should not be null.
+	#[must_use]
 	pub(crate) unsafe fn new_unchecked(raw: RawDevice, ptr: *mut ffi::LIBMTP_mtpdevice_t) -> Self {
 		Self { raw, inner: unsafe { *ptr }, inner_ptr: ptr }
 	}
@@ -450,11 +451,13 @@ impl Device {
 	}
 
 	/// Retrieves the underlying structure of the device.
+	#[must_use]
 	pub(crate) fn inner(&self) -> ffi::LIBMTP_mtpdevice_t {
 		self.inner
 	}
 
 	/// Retrieves the pointer to the underlying structure of the device.
+	#[must_use]
 	pub(crate) fn inner_ptr(&self) -> *mut ffi::LIBMTP_mtpdevice_t {
 		self.inner_ptr
 	}
@@ -566,6 +569,7 @@ impl Device {
 	}
 
 	/// Pops the last error from the error stack.
+	#[must_use]
 	pub(crate) fn pop_err(&self) -> Option<Error> {
 		let stack = unsafe { ffi::LIBMTP_Get_Errorstack(self.inner_ptr) };
 		let err = Error::from_ffi(stack);
@@ -612,6 +616,7 @@ pub struct Battery {
 
 impl Battery {
 	/// Constructs a new battery.
+	#[must_use]
 	pub(crate) fn new(now: u8, max: u8) -> Self {
 		Self { now, max }
 	}
@@ -708,6 +713,7 @@ impl RawDevice {
 	/// # Safety
 	///
 	/// `ptr` should not be null.
+	#[must_use]
 	pub(crate) unsafe fn new_unchecked(ptr: *mut ffi::LIBMTP_raw_device_t) -> Self {
 		Self { inner: unsafe { *ptr }, inner_ptr: ptr }
 	}
@@ -853,6 +859,7 @@ impl Vendor<'_> {
 	/// # Panics
 	///
 	/// Panics if the name of the vendor is not a valid UTF-8.
+	#[must_use]
 	pub(crate) fn new(inner: ffi::LIBMTP_device_entry_t) -> Self {
 		let id = inner.vendor_id;
 		let name = unsafe {
@@ -918,6 +925,7 @@ impl Product<'_> {
 	/// # Panics
 	///
 	/// Panics if the name of the product is not a valid UTF-8.
+	#[must_use]
 	pub(crate) fn new(inner: ffi::LIBMTP_device_entry_t) -> Self {
 		let id = inner.product_id;
 		let name = unsafe {
@@ -984,6 +992,7 @@ impl RawDeviceIter {
 	/// # Safety
 	///
 	/// `ptr` should not be null.
+	#[must_use]
 	pub(crate) unsafe fn new_unchecked(ptr: *mut ffi::LIBMTP_raw_device_t, len: isize) -> Self {
 		Self { ptr, len, off: 0 }
 	}

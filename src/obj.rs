@@ -30,16 +30,17 @@ impl<'a> Object<'a> {
 	/// # Safety
 	///
 	/// `ptr` should not be null.
+	#[must_use]
 	pub(crate) unsafe fn new_unchecked(
 		owner: &'a Storage,
+		parent: Option<&'a Folder>,
 		ptr: *mut ffi::LIBMTP_file_t,
-		ownership: Ownership,
 	) -> Self {
 		let inner = unsafe { *ptr };
 		if FileKind::new(inner.filetype).is_none() {
-			return Self::Folder(unsafe { Folder::new_unchecked(owner, ptr, ownership) });
+			return Self::Folder(unsafe { Folder::new_unchecked(owner, parent, ptr) });
 		}
-		Self::File(unsafe { File::new_unchecked(owner, ptr) })
+		Self::File(unsafe { File::new_unchecked(owner, parent, ptr) })
 	}
 
 	/// Retrieves the ID of the object.
@@ -57,6 +58,24 @@ impl<'a> Object<'a> {
 		match self {
 			Self::Folder(f) => f.name(),
 			Self::File(f) => f.name(),
+		}
+	}
+
+	/// Retrieves the storage to which the object belongs.
+	#[must_use]
+	pub fn owner(&self) -> &Storage {
+		match self {
+			Self::Folder(f) => f.owner(),
+			Self::File(f) => f.owner(),
+		}
+	}
+
+	/// Retrieves the folder to which the object belongs.
+	#[must_use]
+	pub fn parent(&self) -> Option<&Folder> {
+		match self {
+			Self::Folder(f) => f.parent(),
+			Self::File(f) => f.parent(),
 		}
 	}
 
@@ -133,22 +152,23 @@ impl<'a> Object<'a> {
 pub struct Folder<'a> {
 	/// The storage to which the folder belongs.
 	owner: &'a Storage<'a>,
+	/// The folder to which the folder belongs.
+	parent: Option<&'a Folder<'a>>,
 	/// The underlying structure of the folder.
 	inner: ffi::LIBMTP_file_t,
 	/// The pointer to the underlying structure of the folder.
 	inner_ptr: *mut ffi::LIBMTP_file_t,
-	/// The responsibility of the folder for the pointer cleanup.
-	ownership: Ownership,
 }
 
 impl<'a> Folder<'a> {
 	/// Constructs a new folder.
+	#[must_use]
 	pub(crate) unsafe fn new_unchecked(
 		owner: &'a Storage,
+		parent: Option<&'a Folder>,
 		ptr: *mut ffi::LIBMTP_file_t,
-		ownership: Ownership,
 	) -> Self {
-		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr, ownership }
+		Self { owner, parent, inner: unsafe { *ptr }, inner_ptr: ptr }
 	}
 
 	/// Retrieves the ID of the folder.
@@ -169,8 +189,15 @@ impl<'a> Folder<'a> {
 	}
 
 	/// Retrieves the storage to which the folder belongs.
-	pub(crate) fn owner(&self) -> &Storage {
+	#[must_use]
+	pub fn owner(&self) -> &Storage {
 		self.owner
+	}
+
+	/// Retrieves the folder to which the folder belongs.
+	#[must_use]
+	pub fn parent(&self) -> Option<&Folder> {
+		self.parent
 	}
 
 	/// Changes the name of the foler.
@@ -334,7 +361,7 @@ impl<'a> Folder<'a> {
 				self.id(),
 			)
 		};
-		unsafe { ObjectIter::new_unchecked(self.owner, ptr, Ownership::Borrows) }
+		unsafe { ObjectIter::new_unchecked(self.owner, Some(self), ptr) }
 	}
 
 	/// Retrieves a recursive iterator over the objects of the folder.
@@ -347,17 +374,16 @@ impl<'a> Folder<'a> {
 				self.id(),
 			)
 		};
-		unsafe { ObjectRecursiveIter::new_unchecked(self.owner, ptr, Ownership::Borrows) }
+		unsafe { ObjectRecursiveIter::new_unchecked(self.owner, Some(self), ptr) }
 	}
 }
 
 #[doc(hidden)]
 impl Drop for Folder<'_> {
 	fn drop(&mut self) {
-		if self.ownership == Ownership::Borrows {
-			return;
+		if self.parent.is_none() {
+			unsafe { ffi::LIBMTP_destroy_file_t(self.inner_ptr) };
 		}
-		unsafe { ffi::LIBMTP_destroy_file_t(self.inner_ptr) };
 	}
 }
 
@@ -376,20 +402,13 @@ impl<'a> IntoIterator for &'a Folder<'a> {
 	}
 }
 
-/// A responsibility for the data cleanup.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub(crate) enum Ownership {
-	/// Instance owns the data and is responsible for its cleanup.
-	Owns,
-	/// Instance borrows the data and is not responsible for its cleanup.
-	Borrows,
-}
-
 /// A file on the storage.
 #[derive(Clone, Hash)]
 pub struct File<'a> {
 	/// The storage to which the file belongs.
 	owner: &'a Storage<'a>,
+	/// The folder to which the file belongs.
+	parent: Option<&'a Folder<'a>>,
 	/// The underlying structure of the file.
 	inner: ffi::LIBMTP_file_t,
 	/// The pointer to the underlying structure of the file.
@@ -402,8 +421,13 @@ impl<'a> File<'a> {
 	/// # Safety
 	///
 	/// `ptr` should not be null.
-	pub(crate) unsafe fn new_unchecked(owner: &'a Storage, ptr: *mut ffi::LIBMTP_file_t) -> Self {
-		Self { owner, inner: unsafe { *ptr }, inner_ptr: ptr }
+	#[must_use]
+	pub(crate) unsafe fn new_unchecked(
+		owner: &'a Storage,
+		parent: Option<&'a Folder>,
+		ptr: *mut ffi::LIBMTP_file_t,
+	) -> Self {
+		Self { owner, parent, inner: unsafe { *ptr }, inner_ptr: ptr }
 	}
 
 	/// Retrieves the ID of the file.
@@ -441,8 +465,15 @@ impl<'a> File<'a> {
 	}
 
 	/// Retrieves the storage to which the file belongs.
-	pub(crate) fn owner(&self) -> &Storage {
+	#[must_use]
+	pub fn owner(&self) -> &Storage {
 		self.owner
+	}
+
+	/// Retrieves the folder to which the file belongs.
+	#[must_use]
+	pub fn parent(&self) -> Option<&Folder> {
+		self.parent
 	}
 
 	/// Changes the name of the file.
@@ -658,6 +689,7 @@ pub enum FileKind {
 
 impl FileKind {
 	/// Constructs a new file kind.
+	#[must_use]
 	pub(crate) fn new(filetype: ffi::LIBMTP_filetype_t) -> Option<Self> {
 		match filetype {
 			ffi::LIBMTP_filetype_t::Wav => Some(Self::Wav),
@@ -707,6 +739,7 @@ impl FileKind {
 	}
 
 	/// Converts the file kind to the underlying enumerator.
+	#[must_use]
 	pub(crate) fn to_ffi(self) -> ffi::LIBMTP_filetype_t {
 		match self {
 			Self::Wav => ffi::LIBMTP_filetype_t::Wav,
@@ -760,10 +793,10 @@ impl FileKind {
 pub struct ObjectIter<'a> {
 	/// The storage to which the object belongs.
 	storage: &'a Storage<'a>,
+	/// The folder to which the object belongs.
+	folder: Option<&'a Folder<'a>>,
 	/// The pointer to the underlying structure of the object.
 	ptr: *mut ffi::LIBMTP_file_t,
-	/// The responsibility of the object for the pointer cleanup.
-	ownership: Ownership,
 }
 
 impl<'a> ObjectIter<'a> {
@@ -772,12 +805,13 @@ impl<'a> ObjectIter<'a> {
 	/// # Safety
 	///
 	/// `ptr` should not be null.
+	#[must_use]
 	pub(crate) unsafe fn new_unchecked(
 		storage: &'a Storage,
+		folder: Option<&'a Folder>,
 		ptr: *mut ffi::LIBMTP_file_t,
-		ownership: Ownership,
 	) -> Self {
-		Self { storage, ptr, ownership }
+		Self { storage, folder, ptr }
 	}
 }
 
@@ -789,7 +823,7 @@ impl<'a> Iterator for ObjectIter<'a> {
 			return None;
 		}
 
-		let obj = unsafe { Object::new_unchecked(self.storage, self.ptr, self.ownership) };
+		let obj = unsafe { Object::new_unchecked(self.storage, self.folder, self.ptr) };
 		self.ptr = unsafe { *self.ptr }.next;
 		Some(obj)
 	}
@@ -800,12 +834,12 @@ impl<'a> Iterator for ObjectIter<'a> {
 pub struct ObjectRecursiveIter<'a> {
 	/// The storage to which the object belongs.
 	storage: &'a Storage<'a>,
+	/// The folder to which the object belongs.
+	folder: Option<&'a Folder<'a>>,
 	/// The stack that holds the IDs of unvisited folders.
 	stack: Vec<u32>,
 	/// The pointer to the underlying structure of the object.
 	ptr: *mut ffi::LIBMTP_file_t,
-	/// The responsibility of the object for the pointer cleanup.
-	ownership: Ownership,
 }
 
 impl<'a> ObjectRecursiveIter<'a> {
@@ -814,12 +848,13 @@ impl<'a> ObjectRecursiveIter<'a> {
 	/// # Safety
 	///
 	/// `ptr` should not be null.
+	#[must_use]
 	pub(crate) unsafe fn new_unchecked(
 		storage: &'a Storage,
+		folder: Option<&'a Folder>,
 		ptr: *mut ffi::LIBMTP_file_t,
-		ownership: Ownership,
 	) -> Self {
-		Self { storage, stack: Vec::new(), ptr, ownership }
+		Self { storage, folder, stack: Vec::new(), ptr }
 	}
 }
 
@@ -834,7 +869,7 @@ impl<'a> Iterator for ObjectRecursiveIter<'a> {
 			self.ptr = unsafe { ffi::LIBMTP_Get_Files_And_Folders(dev_ptr, storage_id, id) };
 		}
 
-		let obj = unsafe { Object::new_unchecked(self.storage, self.ptr, self.ownership) };
+		let obj = unsafe { Object::new_unchecked(self.storage, self.folder, self.ptr) };
 		if obj.is_folder() {
 			self.stack.push(obj.id());
 		}

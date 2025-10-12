@@ -10,6 +10,7 @@ use std::slice;
 /// # Safety
 ///
 /// `ptr` should be a valid pointer to a null-terminated string.
+#[must_use]
 pub unsafe fn ptr_to_string(ptr: *const c_char) -> String {
 	let mut len = 0;
 	let mut c = unsafe { *ptr.offset(len) };
@@ -25,6 +26,7 @@ pub unsafe fn ptr_to_string(ptr: *const c_char) -> String {
 }
 
 #[cfg(any(unix, windows))]
+#[must_use]
 pub fn path_to_cstring(path: &Path) -> CString {
 	#[cfg(unix)]
 	{

@@ -4,7 +4,6 @@ use crate::Device;
 use crate::Object;
 use crate::ObjectIter;
 use crate::ObjectRecursiveIter;
-use crate::Ownership;
 use crate::Result;
 use crate::ffi;
 use std::ffi::CStr;
@@ -121,7 +120,7 @@ impl<'a> Storage<'a> {
 				ffi::LIBMTP_FILES_AND_FOLDERS_ROOT,
 			)
 		};
-		unsafe { ObjectIter::new_unchecked(self, ptr, Ownership::Owns) }
+		unsafe { ObjectIter::new_unchecked(self, None, ptr) }
 	}
 
 	/// Retrieves a recursive iterator over the objects of the storage.
@@ -134,7 +133,7 @@ impl<'a> Storage<'a> {
 				ffi::LIBMTP_FILES_AND_FOLDERS_ROOT,
 			)
 		};
-		unsafe { ObjectRecursiveIter::new_unchecked(self, ptr, Ownership::Owns) }
+		unsafe { ObjectRecursiveIter::new_unchecked(self, None, ptr) }
 	}
 }
 
