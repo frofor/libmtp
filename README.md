@@ -4,9 +4,9 @@ A memory safe API for interacting with libmtp library in Rust.
 
 [![crates.io](https://img.shields.io/crates/v/libmtp)](https://crates.io/crates/libmtp)
 
-## Install
+## Installation
 
-To install the latest version of `libmtp` from [crates.io](https://crates.io/crates/libmtp), run:
+To install the latest version of the crate from [crates.io](https://crates.io/crates/libmtp), run:
 
 ```sh
 $ cargo add libmtp
@@ -31,18 +31,18 @@ fn main() -> libmtp::Result<()> {
 }
 ```
 
-For more examples, see [examples](https://codeberg.org/frofor/libmtp/src/branch/stable/examples).
+For more examples, see [examples](https://codeberg.org/frofor/libmtp/src/branch/main/examples).
 
 ## Changelog
 
-For a release history, see [CHANGELOG.md](https://codeberg.org/frofor/libmtp/src/branch/stable/doc/CHANGELOG.md).
+For a release history, see [CHANGELOG.md](https://codeberg.org/frofor/libmtp/src/branch/main/doc/CHANGELOG.md).
 
 ## Contributing
 
-For a contibuting guide, see [CONTRIBUTING.md](https://codeberg.org/frofor/libmtp/src/branch/stable/doc/CONTRIBUTING.md).
+For a contibuting guide, see [CONTRIBUTING.md](https://codeberg.org/frofor/libmtp/src/branch/main/doc/CONTRIBUTING.md).
 
 ## License
 
 This crate is distributed under the terms of MIT License.
 
-See [LICENSE](https://codeberg.org/frofor/libmtp/src/branch/stable/LICENSE) for details.
+See [LICENSE](https://codeberg.org/frofor/libmtp/src/branch/main/LICENSE) for details.
