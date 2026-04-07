@@ -736,6 +736,24 @@ impl RawDevice {
 		self.inner.devnum
 	}
 
+	/// Retrieves the bus number of the device.
+	///
+	/// # Examples
+	///
+	/// ```no_run
+	/// use libmtp::RawDevice;
+	///
+	/// # fn main() -> libmtp::Result<()> {
+	/// let raw_device = RawDevice::from_order(1)?.expect("Device should exist");
+	/// println!("{:?}", raw_device.bus());
+	/// # Ok(())
+	/// # }
+	/// ```
+	#[must_use]
+	pub fn bus(&self) -> u32 {
+		self.inner.bus_location
+	}
+
 	/// Retrieves the vendor of the device.
 	///
 	/// # Panics

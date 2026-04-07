@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+Added `RawDevice::bus` (by @pemattern).
+
 ## 0.5.1
 
 Updated object API:
